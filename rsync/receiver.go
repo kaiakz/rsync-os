@@ -1,8 +1,12 @@
 package rsync
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
 	"io"
+	"net"
+	"strings"
 )
 
 // Header: '@RSYNCD: 31.0\n' + ? + '\n' + arguments + '\0'
@@ -115,9 +119,34 @@ func GetEntry(ds chan byte, filelist *[]FileInfo) error {
 }
 
 
-func Generator() {
+
+
+func Generate(conn net.Conn, filelist *[]FileInfo) {
 	// Compare all local files with file list, pick up the files that has different size, mtime
 	// Those files are `basis files`
+	var idx int32
+	for i:=0; i < len(*filelist); i++ {
+		if strings.Index((*filelist)[i].Path, "src.rpm") != -1 {
+			idx = int32(i)
+			fmt.Println("Pick:", (*filelist)[i].Path)
+			break
+		}
+	}
+		buf := new(bytes.Buffer)
+		binary.Write(buf, binary.LittleEndian, idx)
+		fmt.Println(buf.Bytes())
+		conn.Write(buf.Bytes())
+		empty := []byte{0,0,0,0}
+		conn.Write(empty)
+		conn.Write(empty)
+		conn.Write(empty)
+		conn.Write(empty)
+
+		buf.Reset()
+		binary.Write(buf, binary.LittleEndian, -1)
+		conn.Write(buf.Bytes())
+
+
 }
 
 // a block: [file id + block checksum + '\0']
