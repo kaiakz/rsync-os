@@ -64,7 +64,6 @@ func DeMuxBuf(conn net.Conn, buf *bytes.Buffer)  {
 				return
 			}
 
-			buf.Write(body)
 
 
 		} else {	// out-of-band data
@@ -132,7 +131,7 @@ func DeMuxChan(conn net.Conn, data chan byte) {
 		tag := header[3]	// Little Endian
 		size := (binary.LittleEndian.Uint32(header) & 0xffffff)		// TODO: zero?
 
-		fmt.Println("TAG", tag, "SIZE", size)
+		fmt.Println("*****TAG", tag, "SIZE", size, "*****")
 
 		if tag == 7 {	// MUL_BASE + MSG_DATA
 			body := make([]byte, size)

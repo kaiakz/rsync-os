@@ -9,7 +9,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"net"
@@ -79,14 +78,20 @@ func Client() {
 
 	data := make(chan byte, 1024*1024)
 	go rsync.DeMuxChan(conn, data)
-	parent := new(bytes.Buffer)
+
+	filelist := make([]rsync.FileInfo, 0, 3072)
 	// recv_file_list
 	for {
-		if rsync.GetEntry(data, parent) == io.EOF {
+		if rsync.GetEntry(data, &filelist) == io.EOF {
 			break
 		}
 	}
+	fmt.Println("Received File List OK, total size is", len(filelist))
 
+	ioerr := rsync.GetInteger(data)
+	fmt.Println("IOERR", ioerr)
+
+	// Generate target file list
 
 }
 

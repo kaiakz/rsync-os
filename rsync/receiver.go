@@ -1,7 +1,6 @@
 package rsync
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 )
@@ -13,9 +12,16 @@ func handshake() {
 	
 }
 
+type FileInfo struct {
+	Path string
+	Size int64
+	Mtime int32
+	Mode int32
+}
+
 
 // file list: ends with '\0'
-func GetEntry(ds chan byte, parent *bytes.Buffer) error {
+func GetEntry(ds chan byte, filelist *[]FileInfo) error {
 
 	flags := <- ds
 
@@ -53,35 +59,57 @@ func GetEntry(ds chan byte, parent *bytes.Buffer) error {
 	// TODO: if pathlen + partical == 0
 	// malloc len error?
 
-	/* If so, use last */
-	if (0x20 & flags) != 0 {
-		// return last 4096bytes
-	}
+	// last := (*filelist)[len(*filelist) - 1]	// FIXME
+
 
 	p := make([]byte, pathlen)
 	GetBytes(ds, p)
-	fmt.Println("Path ", string(p))
+	var path string
+	/* If so, use last */
+	if (0x20 & flags) != 0 {	// FLIST_NAME_SAME
+		last := (*filelist)[len(*filelist) - 1]
+		path = last.Path[0: partial]
+	}
+	path += string(p)
+	fmt.Println("Path ", path)
 
 	size := GetVarint(ds)
 	fmt.Println("Size ", size)
 
 	/* Read the modification time. */
+	var mtime int32
 	if (flags & 0x80) == 0 {
-		fmt.Println("MTIME ", GetInteger(ds))
-	}
+		mtime = GetInteger(ds)
 
+	} else {
+		mtime = (*filelist)[len(*filelist) - 1].Mtime
+	}
+	fmt.Println("MTIME ", mtime)
+
+	/* Read the file mode. */
 	var mode int32
 	if (flags & 0x02) == 0 {
 		mode = GetInteger(ds)
-		fmt.Println("Mode", uint32(mode))
-	}
 
+	} else {
+		mode = (*filelist)[len(*filelist) - 1].Mode
+	}
+	fmt.Println("Mode", uint32(mode))
+
+	// FIXME: Sym link
 	if ((mode & 32768) != 0) && ((mode & 8192) != 0) {
 		len := uint32(GetInteger(ds))
 		slink := make([]byte, len)
 		GetBytes(ds, slink)
 		fmt.Println("Symbolic Len", len, "CTX", slink)
 	}
+
+	*filelist = append(*filelist, FileInfo{
+		Path:  path,
+		Size:  size,
+		Mtime: mtime,
+		Mode:  mode,
+	})
 
 	return nil
 }
