@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 )
 
@@ -193,4 +194,48 @@ func GetVarint(data chan byte) int64 {
 	}
 
 	return GetLong(data)
+}
+
+func GetFiles(data chan byte, filelist *[]FileInfo) {
+	for {
+		idx := GetInteger(data)
+		if idx == -1 {
+			return
+		}
+		fmt.Println(idx)
+		// idx out of range?
+		GetFile(data, &((*filelist)[idx]))
+	}
+}
+
+func GetFile(data chan byte, info *FileInfo) {
+
+	path := info.Path
+
+	count := GetInteger(data)  /* block count */
+	blen := GetInteger(data)  /* block length */
+	clen := GetInteger(data)  /* checksum length */
+	remainder := GetInteger(data)  /* block remainder */
+
+	fmt.Println(path, count, blen, clen, remainder)
+
+	for {
+		t := GetInteger(data)
+
+		if t == 0 {
+			break
+		} else if t < 0 {
+			// Reference
+		} else {
+			ctx := make([]byte, t)
+			GetBytes(data, ctx)
+			fmt.Println(ctx)
+			ioutil.WriteFile("temp.txt", ctx, 0644)
+		}
+	}
+
+	// Remote MD4
+	md4 := make([]byte, 16)
+	GetBytes(data, md4)
+	fmt.Println("MD4", md4)
 }

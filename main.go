@@ -92,6 +92,10 @@ func Client() {
 	fmt.Println("IOERR", ioerr)
 
 	// Generate target file list
+	rsync.Generate(conn, &filelist)
+
+	//fmt.Println(<-data)
+	rsync.GetFiles(data, &filelist)
 
 }
 
