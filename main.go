@@ -13,6 +13,7 @@ import (
 	"io"
 	"net"
 	"rsync2os/rsync"
+	"sort"
 	"strings"
 )
 
@@ -79,7 +80,7 @@ func Client() {
 	data := make(chan byte, 1024*1024)
 	go rsync.DeMuxChan(conn, data)
 
-	filelist := make([]rsync.FileInfo, 0, 3072)
+	filelist := make(rsync.FileList, 0, 3072)
 	// recv_file_list
 	for {
 		if rsync.GetEntry(data, &filelist) == io.EOF {
@@ -91,8 +92,13 @@ func Client() {
 	ioerr := rsync.GetInteger(data)
 	fmt.Println("IOERR", ioerr)
 
+	// Sort it
+	sort.Sort(filelist)
+
 	// Generate target file list
 	rsync.Generate(conn, &filelist)
+
+	fmt.Println(filelist)
 
 	//fmt.Println(<-data)
 	rsync.GetFiles(data, &filelist)

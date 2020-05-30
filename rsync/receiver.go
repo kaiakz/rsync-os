@@ -22,9 +22,25 @@ type FileInfo struct {
 	Mode int32
 }
 
+type FileList []FileInfo
+
+func (I FileList) Len() int {
+	return len(I)
+}
+
+func (I FileList) Less(i, j int) bool {
+	if strings.Compare(I[i].Path, I[j].Path) == -1 {
+		return true
+	}
+	return false
+}
+
+func (I FileList) Swap(i, j int) {
+	I[i], I[j] = I[j], I[i]
+}
 
 // file list: ends with '\0'
-func GetEntry(ds chan byte, filelist *[]FileInfo) error {
+func GetEntry(ds chan byte, filelist *FileList) error {
 
 	flags := <- ds
 
@@ -120,14 +136,14 @@ func GetEntry(ds chan byte, filelist *[]FileInfo) error {
 
 
 
-func Generate(conn net.Conn, filelist *[]FileInfo) {
+func Generate(conn net.Conn, filelist *FileList) {
 	// Compare all local files with file list, pick up the files that has different size, mtime
 	// Those files are `basis files`
 	var idx int32
 	for i:=0; i < len(*filelist); i++ {
-		if strings.Index((*filelist)[i].Path, "SRPMS/Packages/p/PyXB-1.2.4-2.el7.src.rpm") != -1 {	// 95533 SRPMS/Packages/z/zanata-python-client-1.5.1-1.el7.src.rpm
+		if strings.Index((*filelist)[i].Path, "SRPMS/Packages/0/0ad-0.0.22-1.el7.src.rpm") != -1 {	// 95533 SRPMS/Packages/z/zanata-python-client-1.5.1-1.el7.src.rpm
 			idx = int32(i)
-			fmt.Println("Pick:", (*filelist)[i].Path, idx)
+			fmt.Println("Pick:", (*filelist)[i], idx)
 			break
 		}
 	}

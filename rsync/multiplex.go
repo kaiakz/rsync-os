@@ -196,7 +196,7 @@ func GetVarint(data chan byte) int64 {
 	return GetLong(data)
 }
 
-func GetFiles(data chan byte, filelist *[]FileInfo) {
+func GetFiles(data chan byte, filelist *FileList) {
 	for {
 		idx := GetInteger(data)
 		if idx == -1 {
@@ -208,7 +208,7 @@ func GetFiles(data chan byte, filelist *[]FileInfo) {
 	}
 }
 
-func lookup(size int64, filelist *[]FileInfo) {
+func lookup(size int64, filelist *FileList) {
 	for i,f := range(*filelist) {
 		if f.Size == size {
 			fmt.Println("True File:", i, f)
@@ -216,7 +216,7 @@ func lookup(size int64, filelist *[]FileInfo) {
 	}
 }
 
-func GetFile(data chan byte, info *FileInfo, filelist *[]FileInfo) {
+func GetFile(data chan byte, info *FileInfo, filelist *FileList) {
 
 	path := info.Path
 
