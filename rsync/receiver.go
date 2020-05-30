@@ -1,7 +1,6 @@
 package rsync
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -126,25 +125,30 @@ func Generate(conn net.Conn, filelist *[]FileInfo) {
 	// Those files are `basis files`
 	var idx int32
 	for i:=0; i < len(*filelist); i++ {
-		if strings.Index((*filelist)[i].Path, "src.rpm") != -1 {
+		if strings.Index((*filelist)[i].Path, "SRPMS/Packages/p/PyXB-1.2.4-2.el7.src.rpm") != -1 {	// 95533 SRPMS/Packages/z/zanata-python-client-1.5.1-1.el7.src.rpm
 			idx = int32(i)
-			fmt.Println("Pick:", (*filelist)[i].Path)
+			fmt.Println("Pick:", (*filelist)[i].Path, idx)
 			break
 		}
 	}
-		buf := new(bytes.Buffer)
-		binary.Write(buf, binary.LittleEndian, idx)
-		fmt.Println(buf.Bytes())
-		conn.Write(buf.Bytes())
+		//buf := new(bytes.Buffer)
+		binary.Write(conn, binary.LittleEndian, idx)
+		//fmt.Println(buf.Bytes())
+		//conn.Write(buf.Bytes())
+		//binary.Write(conn, binary.LittleEndian, uint16(0x8000))
 		empty := []byte{0,0,0,0}
-		conn.Write(empty)
-		conn.Write(empty)
-		conn.Write(empty)
-		conn.Write(empty)
 
-		buf.Reset()
-		binary.Write(buf, binary.LittleEndian, -1)
-		conn.Write(buf.Bytes())
+		// identifier, block count, block length, checksum length, block remainder, blocks(short+long)
+		conn.Write(empty)
+		binary.Write(conn, binary.LittleEndian, int32(32768))
+		binary.Write(conn, binary.LittleEndian, int32(2))
+		conn.Write(empty)
+		// Empty checksum
+
+
+		//buf.Reset()
+		binary.Write(conn, binary.LittleEndian, int32(-1))
+		//conn.Write(buf.Bytes())
 
 
 }

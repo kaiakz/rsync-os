@@ -204,11 +204,19 @@ func GetFiles(data chan byte, filelist *[]FileInfo) {
 		}
 		fmt.Println(idx)
 		// idx out of range?
-		GetFile(data, &((*filelist)[idx]))
+		GetFile(data, &((*filelist)[idx]), filelist)
 	}
 }
 
-func GetFile(data chan byte, info *FileInfo) {
+func lookup(size int64, filelist *[]FileInfo) {
+	for i,f := range(*filelist) {
+		if f.Size == size {
+			fmt.Println("True File:", i, f)
+		}
+	}
+}
+
+func GetFile(data chan byte, info *FileInfo, filelist *[]FileInfo) {
 
 	path := info.Path
 
@@ -217,22 +225,27 @@ func GetFile(data chan byte, info *FileInfo) {
 	clen := GetInteger(data)  /* checksum length */
 	remainder := GetInteger(data)  /* block remainder */
 
-	fmt.Println(path, count, blen, clen, remainder)
-
+	fmt.Println(path, count, blen, clen, remainder, info.Size)
+	buf := new(bytes.Buffer)
 	for {
-		t := GetInteger(data)
-
-		if t == 0 {
+		token := GetInteger(data)
+		fmt.Println("TOKEN", token)
+		if token == 0 {
 			break
-		} else if t < 0 {
+		} else if token < 0 {
 			// Reference
 		} else {
-			ctx := make([]byte, t)
+			ctx := make([]byte, token)
 			GetBytes(data, ctx)
-			fmt.Println(ctx)
-			ioutil.WriteFile("temp.txt", ctx, 0644)
+			fmt.Println("Buff size:", buf.Len())
+			buf.Write(ctx)
 		}
 	}
+	fmt.Println("Buff Total size:", buf.Len())
+	lookup(int64(buf.Len()), filelist)
+	ioutil.WriteFile("temp.txt", buf.Bytes(), 0644)
+
+
 
 	// Remote MD4
 	md4 := make([]byte, 16)
