@@ -92,16 +92,17 @@ func Client() {
 	ioerr := rsync.GetInteger(data)
 	fmt.Println("IOERR", ioerr)
 
-	// Sort it
+	// Sort the filelist lexicographically
 	sort.Sort(filelist)
 
 	// Generate target file list
 	rsync.Generate(conn, &filelist)
 
-	fmt.Println(filelist)
+	//fmt.Println(filelist)
 
-	//fmt.Println(<-data)
-	rsync.GetFiles(data, &filelist)
+	rsync.GetFiles(data, conn, &filelist)
+
+
 
 }
 
