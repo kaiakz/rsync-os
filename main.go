@@ -9,12 +9,11 @@
 package main
 
 import (
-	"fmt"
 	"io"
+	"log"
 	"net"
 	"rsync2os/rsync"
 	"sort"
-	"strings"
 )
 
 // type FList struct {
@@ -35,47 +34,10 @@ func Client() {
 
 	defer conn.Close()
 
-	// send my version
-	// send("@RSYNCD: 31.0\n");
-	conn.Write([]byte("@RSYNCD: 27.0\n"))
-
-	// receive server's protocol version and seed
-	version_str, _ := rsync.ReadLine(conn)
-
-	var remote_protocol, remote_sub int
-	fmt.Sscanf(version_str, "@RSYNCD: %d.%d", remote_protocol, remote_sub)
-	fmt.Println(version_str)
-
-	// recv(version)
-	// scanf(version, "@RSYNCD: %d.%d", )
-
-	// send mod name
-	// send("Foo\n")
-	conn.Write([]byte("epel\n"))
-	// conn.Write([]byte("\n"))
-
-	for {
-		// Wait for '@RSYNCD: OK': until \n, then add \0
-		res, _ := rsync.ReadLine(conn)
-		fmt.Print(res)
-		if strings.HasPrefix(res, "@RSYNCD: OK") {
-			break
-		}
-	}
-
-	// send parameters list
-	//conn.Write([]byte("--server\n--sender\n-g\n-l\n-o\n-p\n-D\n-r\n-t\n.\nepel/7/SRPMS\n\n"))
-	conn.Write([]byte("--server\n--sender\n-l\n-p\n-r\n-t\n.\nepel/7/SRPMS\n\n"))	// without gid, uid, mdev
-
-	// read int32 as seed
-	bseed := rsync.ReadInteger(conn)
-	fmt.Println("SEED", bseed)
-
-	// send filter_list, empty is 32-bit zero
-	conn.Write([]byte("\x00\x00\x00\x00"))
+	rsync.HandShake(conn)
 
 	// fmt.Println(readInteger(conn))
-	fmt.Println("Handshake OK")
+	log.Println("HandShake OK")
 
 	data := make(chan byte, 1024*1024)
 	go rsync.DeMuxChan(conn, data)
@@ -83,14 +45,14 @@ func Client() {
 	filelist := make(rsync.FileList, 0, 3072)
 	// recv_file_list
 	for {
-		if rsync.GetEntry(data, &filelist) == io.EOF {
+		if rsync.GetFileList(data, &filelist) == io.EOF {
 			break
 		}
 	}
-	fmt.Println("Received File List OK, total size is", len(filelist))
+	log.Println("Received File List OK, total size is", len(filelist))
 
 	ioerr := rsync.GetInteger(data)
-	fmt.Println("IOERR", ioerr)
+	log.Println("IOERR", ioerr)
 
 	// Sort the filelist lexicographically
 	sort.Sort(filelist)
