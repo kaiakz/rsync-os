@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"strings"
 )
@@ -23,7 +24,7 @@ func HandShake(conn net.Conn) {
 
 	var remote_protocol, remote_sub int
 	fmt.Sscanf(version_str, "@RSYNCD: %d.%d", remote_protocol, remote_sub)
-	fmt.Println(version_str)
+	log.Println(version_str)
 
 	// recv(version)
 	// scanf(version, "@RSYNCD: %d.%d", )
@@ -36,7 +37,7 @@ func HandShake(conn net.Conn) {
 	for {
 		// Wait for '@RSYNCD: OK': until \n, then add \0
 		res, _ := ReadLine(conn)
-		fmt.Print(res)
+		log.Print(res)
 		if strings.HasPrefix(res, "@RSYNCD: OK") {
 			break
 		}
@@ -48,7 +49,7 @@ func HandShake(conn net.Conn) {
 
 	// read int32 as seed
 	bseed := ReadInteger(conn)
-	fmt.Println("SEED", bseed)
+	log.Println("SEED", bseed)
 
 	// send filter_list, empty is 32-bit zero
 	conn.Write([]byte("\x00\x00\x00\x00"))
@@ -85,7 +86,7 @@ func GetFileList(ds chan byte, filelist *FileList) error {
 
 	var partial, pathlen uint32 = 0, 0
 
-	fmt.Println(flags)
+	log.Println(">>#{flags}<<")
 
 	if flags == 0 {
 		return io.EOF
@@ -100,7 +101,7 @@ func GetFileList(ds chan byte, filelist *FileList) error {
 	 */
 	if (0x20 & flags) != 0 {
 		partial = uint32(GetByte(ds))
-		fmt.Println("Partical", partial)
+		log.Println("Partical", partial)
 	}
 
 	/* Get the (possibly-remaining) filename length. */
@@ -110,7 +111,7 @@ func GetFileList(ds chan byte, filelist *FileList) error {
 	} else {
 		pathlen = uint32(<-ds)
 	}
-	fmt.Println("PathLen", pathlen)
+	log.Println("PathLen", pathlen)
 
 	/* Allocate our full filename length. */
 	/* FIXME: maximum pathname length. */
@@ -129,10 +130,10 @@ func GetFileList(ds chan byte, filelist *FileList) error {
 		path = last.Path[0: partial]
 	}
 	path += string(p)
-	fmt.Println("Path ", path)
+	log.Println("Path ", path)
 
 	size := GetVarint(ds)
-	fmt.Println("Size ", size)
+	log.Println("Size ", size)
 
 	/* Read the modification time. */
 	var mtime int32
@@ -142,7 +143,7 @@ func GetFileList(ds chan byte, filelist *FileList) error {
 	} else {
 		mtime = (*filelist)[len(*filelist) - 1].Mtime
 	}
-	fmt.Println("MTIME ", mtime)
+	log.Println("MTIME ", mtime)
 
 	/* Read the file mode. */
 	var mode int32
@@ -152,14 +153,14 @@ func GetFileList(ds chan byte, filelist *FileList) error {
 	} else {
 		mode = (*filelist)[len(*filelist) - 1].Mode
 	}
-	fmt.Println("Mode", uint32(mode))
+	log.Println("Mode", uint32(mode))
 
 	// FIXME: Sym link
 	if ((mode & 32768) != 0) && ((mode & 8192) != 0) {
 		len := uint32(GetInteger(ds))
 		slink := make([]byte, len)
 		GetBytes(ds, slink)
-		fmt.Println("Symbolic Len", len, "CTX", slink)
+		log.Println("Symbolic Len", len, "CTX", slink)
 	}
 
 	*filelist = append(*filelist, FileInfo{
@@ -179,10 +180,13 @@ func Generate(conn net.Conn, filelist *FileList) {
 	// Compare all local files with file list, pick up the files that has different size, mtime
 	// Those files are `basis files`
 	var idx int32
+
+	// TODO: Supports multi files
+	// For test: here we request a file
 	for i:=0; i < len(*filelist); i++ {
 		if strings.Index((*filelist)[i].Path, "0ad-data-0.0.22-1.el7.src.rpm") != -1 {	// 95533 SRPMS/Packages/z/zanata-python-client-1.5.1-1.el7.src.rpmSRPMS/Packages/0/0ad-0.0.22-1.el7.src.rpm
 			idx = int32(i)
-			fmt.Println("Pick:", (*filelist)[i], idx)
+			log.Println("Pick:", (*filelist)[i], idx)
 			break
 		}
 	}

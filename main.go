@@ -29,7 +29,7 @@ func Client() {
 
 	conn, err := net.Dial("tcp", "101.6.8.193:873")
 	if err != nil {
-
+		// TODO
 	}
 
 	defer conn.Close()
@@ -39,7 +39,9 @@ func Client() {
 	// fmt.Println(readInteger(conn))
 	log.Println("HandShake OK")
 
-	data := make(chan byte, 1024*1024)
+	data := make(chan byte, 16 * 1024 * 1024)
+
+
 	go rsync.DeMuxChan(conn, data)
 
 	filelist := make(rsync.FileList, 0, 3072)

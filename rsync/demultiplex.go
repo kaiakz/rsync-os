@@ -3,10 +3,9 @@ package rsync
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
+	"github.com/minio/minio-go/v6"
 	"golang.org/x/crypto/md4"
 	"io"
-	"github.com/minio/minio-go/v6"
 	//"io/ioutil"
 	"log"
 	"net"
@@ -44,6 +43,7 @@ func RunDeMuxer(conn net.Conn) *DeMuxer {
 	}
 }
 
+// Deprecated
 func DeMuxBuf(conn net.Conn, buf *bytes.Buffer)  {
 	for {
 		// socket read the multipex data & put them to channel
@@ -57,7 +57,7 @@ func DeMuxBuf(conn net.Conn, buf *bytes.Buffer)  {
 		tag := header[3]	// Little Endian
 		size := (binary.LittleEndian.Uint32(header) & 0xffffff)		// TODO: zero?
 
-		fmt.Println("TAG", tag, "SIZE", size)
+		log.Println("TAG", tag, "SIZE", size)
 
 		if tag == 7 {
 			body := make([]byte, size)
@@ -77,7 +77,7 @@ func DeMuxBuf(conn net.Conn, buf *bytes.Buffer)  {
 	}
 }
 
-
+// Deprecated
 func DeMultiplex(conn net.Conn) error {
 	// socket read the multipex data & put them to channel
 		header := make([]byte, 4)		// Header size: 4 bytes
@@ -90,7 +90,7 @@ func DeMultiplex(conn net.Conn) error {
 		tag := header[3]	// Little Endian
 		size := (binary.LittleEndian.Uint32(header) & 0xffffff)		// TODO: zero?
 
-		fmt.Println("TAG", tag, "SIZE", size)
+		log.Println("TAG", tag, "SIZE", size)
 
 		if tag == 7 {
 			body := make([]byte, size)
@@ -101,7 +101,7 @@ func DeMultiplex(conn net.Conn) error {
 				return err
 			}
 
-			fmt.Println(body)
+			log.Println(body)
 
 			//if (body[size-1] | body[size-2] | body[size-3] | body[size-4] | body[size-5]) == 0 {
 			//	fmt.Println("END")
@@ -121,6 +121,7 @@ func DeMultiplex(conn net.Conn) error {
 		return nil
 }
 
+// Goroutine: Demultiplex the package, and push them to channel
 // data: Buffered Channel
 func DeMuxChan(conn net.Conn, data chan byte) {
 	for {
@@ -135,7 +136,7 @@ func DeMuxChan(conn net.Conn, data chan byte) {
 		tag := header[3]	// Little Endian
 		size := (binary.LittleEndian.Uint32(header) & 0xffffff)		// TODO: zero?
 
-		fmt.Println("*****TAG", tag, "SIZE", size, "*****")
+		log.Println("*****TAG", tag, "SIZE", size, "*****")
 
 		if tag == 7 {	// MUL_BASE + MSG_DATA
 			body := make([]byte, size)
@@ -205,7 +206,7 @@ func GetFiles(data chan byte, conn net.Conn, filelist *FileList) {
 		if idx == -1 {
 			return
 		}
-		fmt.Println(idx)
+		log.Println("Server send the file: ", idx)
 		// TODO: idx out of range?
 
 		GetFile(data, &((*filelist)[idx]), filelist)
@@ -215,7 +216,7 @@ func GetFiles(data chan byte, conn net.Conn, filelist *FileList) {
 func lookup(size int64, filelist *FileList) {
 	for i,f := range(*filelist) {
 		if f.Size == size {
-			fmt.Println("True File:", i, f)
+			log.Println("True File:", i, f)
 		}
 	}
 }
@@ -229,11 +230,11 @@ func GetFile(data chan byte, info *FileInfo, filelist *FileList) {
 	clen := GetInteger(data)  /* checksum length */
 	remainder := GetInteger(data)  /* block remainder */
 
-	fmt.Println(path, count, blen, clen, remainder, info.Size)
+	log.Println(path, count, blen, clen, remainder, info.Size)
 	buf := new(bytes.Buffer)
 	for {
 		token := GetInteger(data)
-		fmt.Println("TOKEN", token)
+		log.Println("TOKEN", token)
 		if token == 0 {
 			break
 		} else if token < 0 {
@@ -241,11 +242,11 @@ func GetFile(data chan byte, info *FileInfo, filelist *FileList) {
 		} else {
 			ctx := make([]byte, token)
 			GetBytes(data, ctx)
-			fmt.Println("Buff size:", buf.Len())
+			log.Println("Buff size:", buf.Len())
 			buf.Write(ctx)
 		}
 	}
-	fmt.Println("Buff Total size:", buf.Len())
+	log.Println("Buff Total size:", buf.Len())
 	lookup(int64(buf.Len()), filelist)
 	//ioutil.WriteFile("temp.txt", buf.Bytes(), 0644)
 	WriteOS(buf, path)
@@ -254,13 +255,14 @@ func GetFile(data chan byte, info *FileInfo, filelist *FileList) {
 	lmd4.Write(buf.Bytes())
 
 	// Remote MD4
-	md4 := make([]byte, 16)
-	GetBytes(data, md4)
-	fmt.Println("MD4", md4)
-	fmt.Println("Compute MD4", lmd4.Sum(nil))
+	rmd4 := make([]byte, 16)
+	GetBytes(data, rmd4)
+	log.Println("MD4", rmd4)
+	log.Println("Compute MD4", lmd4.Sum(nil))
 }
 
 func WriteOS(buf *bytes.Buffer, fname string) {
+	// For test
 	endpoint := "127.0.0.1:9000"
 	accessKeyID := "minioadmin"
 	secretAccessKey := "minioadmin"
@@ -274,7 +276,7 @@ func WriteOS(buf *bytes.Buffer, fname string) {
 	// Make a new bucket called mymusic.
 	bucketName := "test"
 	//location := "cn"
-	fmt.Println("MakeBucket")
+	log.Println("Making Bucket: test")
 	err = minioClient.MakeBucket(bucketName, "us-east-1")
 	if err != nil {
 		// Check to see if we already own this bucket (which happens if you run this twice)
@@ -288,7 +290,7 @@ func WriteOS(buf *bytes.Buffer, fname string) {
 		log.Printf("Successfully created %s\n", bucketName)
 	}
 
-	fmt.Println("Update")
+	log.Println("Updating")
 	// Upload the zip file
 	//objectName := "golden-oldies.zip"
 	contentType := "application/x-rpm"
