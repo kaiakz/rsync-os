@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"strconv"
+	"strings"
 )
 
 func ReadLine(conn net.Conn) (string, error) {
@@ -86,75 +88,6 @@ func ReadLong(conn net.Conn) int64 {
 	return int64(binary.LittleEndian.Uint64(data))
 }
 
-func ReadFList(conn net.Conn) {
-
-	flags := ReadByte(conn)
-
-	var partial, pathlen uint32 = 0, 0
-
-	fmt.Println(flags)
-	/*
-	 * Read our filename.
-	 * If we have FLIST_NAME_SAME, we inherit some of the last
-	 * transmitted name.
-	 * If we have FLIST_NAME_LONG, then the string length is greater
-	 * than byte-size.
-	 */
-	if (0x20 & flags) != 0 {
-		partial = uint32(ReadByte(conn))
-		fmt.Println("Partical", partial)
-	}
-
-	/* Get the (possibly-remaining) filename length. */
-	if (0x40 & flags) != 0 {
-		pathlen = uint32(ReadInteger(conn)) // can't use for rsync 31
-		// Var int
-		// i := readByte(conn)
-		// var j byte, len int
-		// for j = 0; j<=6; ++j {
-		// 	if ((i & 0x80) == 0)	break
-		// 	c =
-		// }
-
-	} else {
-		pathlen = uint32(ReadByte(conn))
-	}
-	fmt.Println("PathLen", pathlen)
-
-	/* Allocate our full filename length. */
-	/* FIXME: maximum pathname length. */
-	// if pathlen + partical == 0
-	// malloc len error?
-	//
-	if (0x20 & flags) != 0 {
-		// return last 4096bytes
-	}
-
-	path, _ := ReadBuffer(conn, pathlen)
-	fmt.Println("Path", path)
-
-	size := ReadInteger(conn)
-	fmt.Print("Size", size)
-
-	if (flags & 0x80) == 0 {
-		fmt.Println("MTIME", ReadInteger(conn))
-	}
-
-	var mode int32
-	if (flags & 0x02) == 0 {
-		mode = ReadInteger(conn)
-		fmt.Println("Mode", mode)
-	}
-
-	if ((mode & 32768) != 0) && ((mode & 8192) != 0) {
-		len := uint32(ReadInteger(conn))
-		slink, _ := ReadBuffer(conn, len)
-		fmt.Println("Symbolic", len, "is", slink)
-	}
-
-	//return "\n"
-}
-
 func ReadExact(conn net.Conn, b []byte) (int, error) {
 	for i:= 0; i < len(b); {
 		n, err := conn.Read(b[i:])
@@ -164,4 +97,96 @@ func ReadExact(conn net.Conn, b []byte) (int, error) {
 		i += n
 	}
 	return len(b), nil
+}
+
+// For rsync
+func SplitURIS(uri string) (string, int, string, string, error){
+
+	var host, module, path string
+	var first = []byte(uri)
+	var second []byte
+
+	if strings.HasPrefix(uri, "rsync://") {
+		/* rsync://host[:port]/module[/path] */
+		first = first[8:]
+		i := bytes.IndexByte(first, '/')
+		if i == -1 {
+			// No module name
+			panic("No module name")
+		}
+		second = first[i+1:]	//ignore '/'
+		first = first[:i]
+	} else {
+		// Only for remote
+		/* host::module[/path] */
+		panic("No implement yet")
+	}
+
+	port := 873		// Default port: 873
+
+	// Parse port
+	i := bytes.IndexByte(first, ':')
+	if i != -1  {
+		var err error
+		port, err = strconv.Atoi(string(first[i+1:]))
+		if err != nil {
+			// Wrong port
+			panic("Wrong port")
+		}
+		first = first[:i]
+	}
+	host = string(first)
+
+	// Parse path
+	i = bytes.IndexByte(second, '/')
+	if i != -1 {
+		path = string(second[i:])
+		second = second[:i]
+	}
+	module = string(second)
+
+	return host, port, module, path, nil
+
+}
+
+// For rsync
+func SplitURI(uri string) (string, string, string, error){
+
+	var address, module, path string
+	var first = []byte(uri)
+	var second []byte
+
+	if strings.HasPrefix(uri, "rsync://") {
+		/* rsync://host[:port]/module[/path] */
+		first = first[8:]
+		i := bytes.IndexByte(first, '/')
+		if i == -1 {
+			// No module name
+			panic("No module name")
+		}
+		second = first[i+1:]	//ignore '/'
+		first = first[:i]
+	} else {
+		// Only for remote
+		/* host::module[/path] */
+		panic("No implement yet")
+	}
+
+	address = string(first)
+	// Parse port
+	i := bytes.IndexByte(first, ':')
+	if i == -1  {
+		address += ":873"	// Default port: 873
+	}
+
+	// Parse path
+	i = bytes.IndexByte(second, '/')
+	if i != -1 {
+		path = string(second[i:])
+		second = second[:i]
+	}
+	module = string(second)
+
+	return address, module, path, nil
+
 }

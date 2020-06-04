@@ -22,12 +22,10 @@ func HandShake(conn net.Conn) {
 	// receive server's protocol version and seed
 	version_str, _ := ReadLine(conn)
 
+	// recv(version)
 	var remote_protocol, remote_sub int
 	fmt.Sscanf(version_str, "@RSYNCD: %d.%d", remote_protocol, remote_sub)
 	log.Println(version_str)
-
-	// recv(version)
-	// scanf(version, "@RSYNCD: %d.%d", )
 
 	// send mod name
 	// send("Foo\n")
@@ -172,8 +170,6 @@ func GetFileList(ds chan byte, filelist *FileList) error {
 
 	return nil
 }
-
-
 
 
 func Generate(conn net.Conn, filelist *FileList) {
