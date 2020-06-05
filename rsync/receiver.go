@@ -184,12 +184,12 @@ func GetFileList(data chan byte, filelist *FileList) error {
 
 func RequestFiles(conn net.Conn, data chan byte, filelist *FileList) {
 	empty := make([]byte, 16)	// 4 + 4 + 4 + 4 bytes
-	downloading := false
+	//downloading := false
 
 
 	for i:=0; i < len(*filelist); i++ {
 		if (*filelist)[i].Mode == 0100644 {
-			binary.Write(conn, binary.LittleEndian, i)
+			binary.Write(conn, binary.LittleEndian, int32(i))
 
 			fmt.Println((*filelist)[i].Path)
 			conn.Write(empty)
@@ -198,15 +198,17 @@ func RequestFiles(conn net.Conn, data chan byte, filelist *FileList) {
 			//fmt.Println(ni)
 			//GetFile(data, int32(ni), filelist)
 
-			if !downloading {
-				downloading = false
-				go Downloader(data, filelist)
-			}
+			//if !downloading {
+			//	downloading = false
+			//	go Downloader(data, filelist)
+			//}
 		}
+
 	}
 	fmt.Println("FINISH")
 	// Finish
 	binary.Write(conn, binary.LittleEndian, int32(-1))
+	Downloader(data, filelist)
 }
 
 func RequestAFile(conn net.Conn, target string, filelist *FileList) {
@@ -226,6 +228,7 @@ func RequestAFile(conn net.Conn, target string, filelist *FileList) {
 
 	// identifier
 	binary.Write(conn, binary.LittleEndian, idx)
+
 	// block count, block length(default is 32768?), checksum length(default is 2?), block remainder, blocks(short+long)
 	// Just let them be empty(zero)
 	empty := make([]byte, 16)	// 4 + 4 + 4 + 4 bytes
@@ -239,7 +242,7 @@ func RequestAFile(conn net.Conn, target string, filelist *FileList) {
 	// Empty checksum
 
 	// Finish
-	binary.Write(conn, binary.LittleEndian, int32(-1))
+	//binary.Write(conn, binary.LittleEndian, int32(-1))
 
 }
 
@@ -250,7 +253,7 @@ func Downloader(data chan byte, filelist *FileList) {
 		if index == -1 {
 			return
 		}
-
+		fmt.Println("INDEX:", index)
 		path := (*filelist)[index].Path
 		count := GetInteger(data)  /* block count */
 		blen := GetInteger(data)  /* block length */
@@ -274,7 +277,10 @@ func Downloader(data chan byte, filelist *FileList) {
 				buf.Write(ctx)
 			}
 		}
-		fmt.Println("OK")
+		// Remote MD4
+		rmd4 := make([]byte, 16)
+		GetBytes(data, rmd4)
+		fmt.Println("OK:", rmd4)
 	}
 }
 

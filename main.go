@@ -68,11 +68,11 @@ func Client(uri string) {
 	sort.Sort(filelist)
 
 	// Generate target file list
-	rsync.RequestAFile(conn, "libnemo-extension1_1.8.1+maya_amd64.deb", &filelist)
-	rsync.GetFiles(data, conn, &filelist)
+	//rsync.RequestAFile(conn, "libnemo-extension1_1.8.1+maya_amd64.deb", &filelist)
+	//rsync.GetFiles(data, conn, &filelist)
 
 
-	//rsync.RequestFiles(conn, data, &filelist)
+	rsync.RequestFiles(conn, data, &filelist)
 	//go rsync.Downloader(data, &filelist)
 	//fmt.Println(filelist)
 
