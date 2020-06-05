@@ -26,9 +26,13 @@ import (
 
 
 
-func Client() {
+func Client(uri string) {
 
-	conn, err := net.Dial("tcp", "101.6.8.193:873")
+	addr, module, path, _ := rsync.SplitURI(uri)
+
+	fmt.Println(module, path)
+
+	conn, err := net.Dial("tcp", addr)
 	// tuna: mirrors.tuna.tsinghua.edu.cn 101.6.8.193:873
 
 	if err != nil {
@@ -37,7 +41,7 @@ func Client() {
 
 	defer conn.Close()
 
-	rsync.HandShake(conn)
+	rsync.HandShake(conn, module, path)
 
 	// fmt.Println(readInteger(conn))
 	log.Println("HandShake OK")
@@ -55,7 +59,7 @@ func Client() {
 			break
 		}
 	}
-	log.Println("Received File List OK, total size is", len(filelist))
+	log.Println("File List Received, total size is", len(filelist))
 
 	ioerr := rsync.GetInteger(data)
 	log.Println("IOERR", ioerr)
@@ -64,20 +68,21 @@ func Client() {
 	sort.Sort(filelist)
 
 	// Generate target file list
-	rsync.Generate(conn, &filelist)
+	rsync.RequestAFile(conn, "libnemo-extension1_1.8.1+maya_amd64.deb", &filelist)
+	rsync.GetFiles(data, conn, &filelist)
 
+
+	//rsync.RequestFiles(conn, data, &filelist)
+	//go rsync.Downloader(data, &filelist)
 	//fmt.Println(filelist)
 
-	rsync.GetFiles(data, conn, &filelist)
 
 
 
 }
 
 func main() {
-	//Client()
-	fmt.Println(rsync.SplitURI("rsync://mirrors.tuna.tsinghua.edu.cn:1080/elvish"))
-	fmt.Println(rsync.SplitURI("rsync://mirror.tuna.tsinghua.edu.cn:1080000/epel/7/SRPMS"))
+	Client("rsync://mirrors.kernel.org/linuxmint-packages/pool/romeo/n/nemo/")
 }
 
 

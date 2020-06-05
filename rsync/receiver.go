@@ -1,6 +1,7 @@
 package rsync
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -14,7 +15,7 @@ import (
 
 
 // See clienserver.c start_inband_exchange
-func HandShake(conn net.Conn) {
+func HandShake(conn net.Conn, module string, path string) {
 	// send my version
 	// send("@RSYNCD: 31.0\n");
 	conn.Write([]byte("@RSYNCD: 27.0\n"))
@@ -29,21 +30,29 @@ func HandShake(conn net.Conn) {
 
 	// send mod name
 	// send("Foo\n")
-	conn.Write([]byte("epel\n"))
+	conn.Write([]byte(module))
+	conn.Write([]byte("\n"))
+	//conn.Write([]byte("epel\n"))
 	// conn.Write([]byte("\n"))
 
 	for {
 		// Wait for '@RSYNCD: OK': until \n, then add \0
 		res, _ := ReadLine(conn)
 		log.Print(res)
-		if strings.HasPrefix(res, "@RSYNCD: OK") {
+		if strings.Contains(res, "@RSYNCD: OK") {
 			break
 		}
 	}
 
 	// send parameters list
 	//conn.Write([]byte("--server\n--sender\n-g\n-l\n-o\n-p\n-D\n-r\n-t\n.\nepel/7/SRPMS\n\n"))
-	conn.Write([]byte("--server\n--sender\n-l\n-p\n-r\n-t\n.\nepel/7/SRPMS\n\n"))	// without gid, uid, mdev
+	//conn.Write([]byte("--server\n--sender\n-l\n-p\n-r\n-t\n.\nepel/7/SRPMS\n\n"))	// without gid, uid, mdev
+	args := new(bytes.Buffer)
+	args.Write([]byte("--server\n--sender\n-l\n-p\n-r\n-t\n.\n"))
+	args.Write([]byte(module))
+	args.Write([]byte(path))
+	args.Write([]byte("\n\n"))
+	conn.Write(args.Bytes())
 
 	// read int32 as seed
 	bseed := ReadInteger(conn)
@@ -78,13 +87,13 @@ func (I FileList) Swap(i, j int) {
 }
 
 // file list: ends with '\0'
-func GetFileList(ds chan byte, filelist *FileList) error {
+func GetFileList(data chan byte, filelist *FileList) error {
 
-	flags := <- ds
+	flags := <- data
 
 	var partial, pathlen uint32 = 0, 0
 
-	log.Println(">>#{flags}<<")
+	log.Println(flags)
 
 	if flags == 0 {
 		return io.EOF
@@ -98,16 +107,16 @@ func GetFileList(ds chan byte, filelist *FileList) error {
 	 * than byte-size.
 	 */
 	if (0x20 & flags) != 0 {
-		partial = uint32(GetByte(ds))
+		partial = uint32(GetByte(data))
 		log.Println("Partical", partial)
 	}
 
 	/* Get the (possibly-remaining) filename length. */
 	if (0x40 & flags) != 0 {
-		pathlen = uint32(GetInteger(ds)) // can't use for rsync 31
+		pathlen = uint32(GetInteger(data)) // can't use for rsync 31
 
 	} else {
-		pathlen = uint32(<-ds)
+		pathlen = uint32(<-data)
 	}
 	log.Println("PathLen", pathlen)
 
@@ -120,7 +129,7 @@ func GetFileList(ds chan byte, filelist *FileList) error {
 
 
 	p := make([]byte, pathlen)
-	GetBytes(ds, p)
+	GetBytes(data, p)
 	var path string
 	/* If so, use last */
 	if (0x20 & flags) != 0 {	// FLIST_NAME_SAME
@@ -130,13 +139,13 @@ func GetFileList(ds chan byte, filelist *FileList) error {
 	path += string(p)
 	log.Println("Path ", path)
 
-	size := GetVarint(ds)
+	size := GetVarint(data)
 	log.Println("Size ", size)
 
 	/* Read the modification time. */
 	var mtime int32
 	if (flags & 0x80) == 0 {
-		mtime = GetInteger(ds)
+		mtime = GetInteger(data)
 
 	} else {
 		mtime = (*filelist)[len(*filelist) - 1].Mtime
@@ -146,7 +155,7 @@ func GetFileList(ds chan byte, filelist *FileList) error {
 	/* Read the file mode. */
 	var mode int32
 	if (flags & 0x02) == 0 {
-		mode = GetInteger(ds)
+		mode = GetInteger(data)
 
 	} else {
 		mode = (*filelist)[len(*filelist) - 1].Mode
@@ -155,9 +164,9 @@ func GetFileList(ds chan byte, filelist *FileList) error {
 
 	// FIXME: Sym link
 	if ((mode & 32768) != 0) && ((mode & 8192) != 0) {
-		len := uint32(GetInteger(ds))
+		len := uint32(GetInteger(data))
 		slink := make([]byte, len)
-		GetBytes(ds, slink)
+		GetBytes(data, slink)
 		log.Println("Symbolic Len", len, "CTX", slink)
 	}
 
@@ -171,8 +180,36 @@ func GetFileList(ds chan byte, filelist *FileList) error {
 	return nil
 }
 
+/* Generator */
 
-func Generate(conn net.Conn, filelist *FileList) {
+func RequestFiles(conn net.Conn, data chan byte, filelist *FileList) {
+	empty := make([]byte, 16)	// 4 + 4 + 4 + 4 bytes
+	downloading := false
+
+
+	for i:=0; i < len(*filelist); i++ {
+		if (*filelist)[i].Mode == 0100644 {
+			binary.Write(conn, binary.LittleEndian, i)
+
+			fmt.Println((*filelist)[i].Path)
+			conn.Write(empty)
+
+			//ni := GetInteger(data)
+			//fmt.Println(ni)
+			//GetFile(data, int32(ni), filelist)
+
+			if !downloading {
+				downloading = false
+				go Downloader(data, filelist)
+			}
+		}
+	}
+	fmt.Println("FINISH")
+	// Finish
+	binary.Write(conn, binary.LittleEndian, int32(-1))
+}
+
+func RequestAFile(conn net.Conn, target string, filelist *FileList) {
 	// Compare all local files with file list, pick up the files that has different size, mtime
 	// Those files are `basis files`
 	var idx int32
@@ -180,7 +217,7 @@ func Generate(conn net.Conn, filelist *FileList) {
 	// TODO: Supports multi files
 	// For test: here we request a file
 	for i:=0; i < len(*filelist); i++ {
-		if strings.Index((*filelist)[i].Path, "0ad-data-0.0.22-1.el7.src.rpm") != -1 {	// 95533 SRPMS/Packages/z/zanata-python-client-1.5.1-1.el7.src.rpmSRPMS/Packages/0/0ad-0.0.22-1.el7.src.rpm
+		if strings.Contains((*filelist)[i].Path, target) {	// 0ad-data-0.0.22-1.el7.src.rpm95533 SRPMS/Packages/z/zanata-python-client-1.5.1-1.el7.src.rpmSRPMS/Packages/0/0ad-0.0.22-1.el7.src.rpm
 			idx = int32(i)
 			log.Println("Pick:", (*filelist)[i], idx)
 			break
@@ -189,9 +226,6 @@ func Generate(conn net.Conn, filelist *FileList) {
 
 	// identifier
 	binary.Write(conn, binary.LittleEndian, idx)
-
-
-
 	// block count, block length(default is 32768?), checksum length(default is 2?), block remainder, blocks(short+long)
 	// Just let them be empty(zero)
 	empty := make([]byte, 16)	// 4 + 4 + 4 + 4 bytes
@@ -209,8 +243,42 @@ func Generate(conn net.Conn, filelist *FileList) {
 
 }
 
-// a block: [file id + block checksum + '\0']
+// Goroutine
+func Downloader(data chan byte, filelist *FileList) {
+	for {
+		index := GetInteger(data)
+		if index == -1 {
+			return
+		}
 
+		path := (*filelist)[index].Path
+		count := GetInteger(data)  /* block count */
+		blen := GetInteger(data)  /* block length */
+		clen := GetInteger(data)  /* checksum length */
+		remainder := GetInteger(data)  /* block remainder */
+
+		log.Println(path, count, blen, clen, remainder, (*filelist)[index].Size)
+		buf := new(bytes.Buffer)
+		for {
+			token := GetInteger(data)
+			log.Println("TOKEN", token)
+			if token == 0 {
+				break
+			} else if token < 0 {
+				panic("Wrong Reference")
+				// Reference
+			} else {
+				ctx := make([]byte, token)
+				GetBytes(data, ctx)
+				log.Println("Buff size:", buf.Len())
+				buf.Write(ctx)
+			}
+		}
+		fmt.Println("OK")
+	}
+}
+
+// a block: [file id + block checksum + '\0']
 func exchangeBlock() {
 // Here we get a list stores old files
 // Rolling Checksum & Hash value

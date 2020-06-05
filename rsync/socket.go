@@ -92,14 +92,14 @@ func ReadExact(conn net.Conn, b []byte) (int, error) {
 	for i:= 0; i < len(b); {
 		n, err := conn.Read(b[i:])
 		if err != nil {
-			return n, nil
+			return n, err
 		}
 		i += n
 	}
 	return len(b), nil
 }
 
-// For rsync
+
 func SplitURIS(uri string) (string, int, string, string, error){
 
 	var host, module, path string

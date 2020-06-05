@@ -130,7 +130,7 @@ func DeMuxChan(conn net.Conn, data chan byte) {
 
 		n, err := ReadExact(conn, header)
 		if n != 4 || err != nil {
-			//panic("Mulitplex: Check your wired protocol")
+			panic("Mulitplex: Check your wired protocol")
 		}
 
 		tag := header[3]	// Little Endian
@@ -153,7 +153,7 @@ func DeMuxChan(conn net.Conn, data chan byte) {
 
 		} else {	// out-of-band data
 			//otag := tag - 7
-
+			panic("Error")
 		}
 	}
 }
@@ -200,6 +200,7 @@ func GetVarint(data chan byte) int64 {
 	return GetLong(data)
 }
 
+// FIXME
 func GetFiles(data chan byte, conn net.Conn, filelist *FileList) {
 	for {
 		idx := GetInteger(data)
@@ -209,7 +210,7 @@ func GetFiles(data chan byte, conn net.Conn, filelist *FileList) {
 		log.Println("Server send the file: ", idx)
 		// TODO: idx out of range?
 
-		GetFile(data, &((*filelist)[idx]), filelist)
+		GetFile(data, idx, filelist)
 	}
 }
 
@@ -221,16 +222,16 @@ func lookup(size int64, filelist *FileList) {
 	}
 }
 
-func GetFile(data chan byte, info *FileInfo, filelist *FileList) {
+func GetFile(data chan byte, index int32, filelist *FileList) {
 
-	path := info.Path
+	path := (*filelist)[index].Path
 
 	count := GetInteger(data)  /* block count */
 	blen := GetInteger(data)  /* block length */
 	clen := GetInteger(data)  /* checksum length */
 	remainder := GetInteger(data)  /* block remainder */
 
-	log.Println(path, count, blen, clen, remainder, info.Size)
+	log.Println(path, count, blen, clen, remainder, (*filelist)[index].Size)
 	buf := new(bytes.Buffer)
 	for {
 		token := GetInteger(data)
@@ -293,10 +294,10 @@ func WriteOS(buf *bytes.Buffer, fname string) {
 	log.Println("Updating")
 	// Upload the zip file
 	//objectName := "golden-oldies.zip"
-	contentType := "application/x-rpm"
+	//contentType := "application/x-rpm"
 
 	// Upload the zip file with FPutObject
-	n, err := minioClient.PutObject(bucketName, fname, buf, int64(buf.Len()), minio.PutObjectOptions{ContentType: contentType})
+	n, err := minioClient.PutObject(bucketName, fname, buf, int64(buf.Len()), minio.PutObjectOptions{})
 	if err != nil {
 		log.Fatalln(err)
 	}
