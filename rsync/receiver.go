@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"github.com/minio/minio-go/v6"
 	"io"
 	"log"
 	"net"
@@ -182,11 +183,8 @@ func GetFileList(data chan byte, filelist *FileList) error {
 
 /* Generator */
 
-func RequestFiles(conn net.Conn, data chan byte, filelist *FileList) {
+func RequestFiles(conn net.Conn, data chan byte, filelist *FileList, os *minio.Client, module string, ppath string) {
 	empty := make([]byte, 16)	// 4 + 4 + 4 + 4 bytes
-	//downloading := false
-
-
 	for i:=0; i < len(*filelist); i++ {
 		if (*filelist)[i].Mode == 0100644 {
 			binary.Write(conn, binary.LittleEndian, int32(i))
@@ -194,21 +192,13 @@ func RequestFiles(conn net.Conn, data chan byte, filelist *FileList) {
 			fmt.Println((*filelist)[i].Path)
 			conn.Write(empty)
 
-			//ni := GetInteger(data)
-			//fmt.Println(ni)
-			//GetFile(data, int32(ni), filelist)
-
-			//if !downloading {
-			//	downloading = false
-			//	go Downloader(data, filelist)
-			//}
 		}
 
 	}
-	fmt.Println("FINISH")
+	log.Println("Request completed")
 	// Finish
 	binary.Write(conn, binary.LittleEndian, int32(-1))
-	Downloader(data, filelist)
+	Downloader(data, filelist, os, module, ppath)
 }
 
 func RequestAFile(conn net.Conn, target string, filelist *FileList) {
@@ -242,12 +232,10 @@ func RequestAFile(conn net.Conn, target string, filelist *FileList) {
 	// Empty checksum
 
 	// Finish
-	//binary.Write(conn, binary.LittleEndian, int32(-1))
-
+	binary.Write(conn, binary.LittleEndian, int32(-1))
 }
 
-// Goroutine
-func Downloader(data chan byte, filelist *FileList) {
+func Downloader(data chan byte, filelist *FileList, os *minio.Client, module string, ppath string) {
 	for {
 		index := GetInteger(data)
 		if index == -1 {
@@ -277,6 +265,15 @@ func Downloader(data chan byte, filelist *FileList) {
 				buf.Write(ctx)
 			}
 		}
+
+		// Put file to object storage
+		n, err := os.PutObject(module, (ppath+path)[1:], buf, int64(buf.Len()), minio.PutObjectOptions{})
+		if err != nil {
+			log.Fatalln(err)
+		}
+
+		log.Printf("Successfully uploaded %s of size %d\n", path, n)
+
 		// Remote MD4
 		rmd4 := make([]byte, 16)
 		GetBytes(data, rmd4)

@@ -10,6 +10,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/minio/minio-go/v6"
 	"io"
 	"log"
 	"net"
@@ -37,6 +38,7 @@ func Client(uri string) {
 
 	if err != nil {
 		// TODO
+		panic("Network Error")
 	}
 
 	defer conn.Close()
@@ -67,12 +69,38 @@ func Client(uri string) {
 	// Sort the filelist lexicographically
 	sort.Sort(filelist)
 
+
+
+	// Init the object storage
+	// For test
+	endpoint := "127.0.0.1:9000"
+	accessKeyID := "minioadmin"
+	secretAccessKey := "minioadmin"
+
+	minioClient, err := minio.New(endpoint, accessKeyID, secretAccessKey, false)
+	if err != nil {
+		panic("Failed")
+	}
+
+	// Create a bucket for the module
+	err = minioClient.MakeBucket(module, "us-east-1")
+	if err != nil {
+		// Check to see if we already own this bucket (which happens if you run this twice)
+		exists, errBucketExists := minioClient.BucketExists(module)
+		if errBucketExists == nil && exists {
+			log.Printf("We already own %s\n", module)
+		} else {
+			log.Fatalln(err)
+		}
+	} else {
+		log.Printf("Successfully created %s\n", module)
+	}
+
 	// Generate target file list
 	//rsync.RequestAFile(conn, "libnemo-extension1_1.8.1+maya_amd64.deb", &filelist)
 	//rsync.GetFiles(data, conn, &filelist)
 
-
-	rsync.RequestFiles(conn, data, &filelist)
+	rsync.RequestFiles(conn, data, &filelist, minioClient, module, path)
 	//go rsync.Downloader(data, &filelist)
 	//fmt.Println(filelist)
 
@@ -82,7 +110,11 @@ func Client(uri string) {
 }
 
 func main() {
-	Client("rsync://mirrors.kernel.org/linuxmint-packages/pool/romeo/n/nemo/")
+	//FIXME: Can't handle wrong module/path rsync://mirrors.tuna.tsinghua.edu.cn/linuxmint-packages/pool/romeo/libf/libfm/
+	Client("rsync://mirrors.tuna.tsinghua.edu.cn/elvish")
+	//Client("rsync://rsync.monitoring-plugins.org/plugins/")
+	//Client("rsync://rsync.mirrors.ustc.edu.cn/repo/monitoring-plugins")
+	//	rsync://rsync.monitoring-plugins.org/plugins/
 }
 
 

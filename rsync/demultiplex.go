@@ -222,6 +222,7 @@ func lookup(size int64, filelist *FileList) {
 	}
 }
 
+// Test
 func GetFile(data chan byte, index int32, filelist *FileList) {
 
 	path := (*filelist)[index].Path
