@@ -18,14 +18,6 @@ import (
 	"sort"
 )
 
-// type FList struct {
-// 	path, wpath, link string
-// 	FLStat struct {
-// 		mode, uid, gid, rdev, size, time uint32
-// 	} st
-// }
-
-
 
 func Client(uri string) {
 

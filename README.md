@@ -20,9 +20,10 @@ rsync2os always saves the file list in its database(local file list). rsync2os d
 The rsync server sends the entire file as a stream of bytes.
 
 ## Multiplex & De-Multiplex
+![de-multiplex](https://raw.githubusercontent.com/kaiakz/rsync2os/master/docs/demux.jpg)
 
 ## How to use the demo?
-1. install & run minio, you can configure in WriteOS
+1. install & run minio, you can configure in WriteOS() or Client()
 2. go run main.go
 
 # Reference
