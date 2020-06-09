@@ -183,9 +183,10 @@ func GetFileList(data chan byte, filelist *FileList) error {
 
 /* Generator */
 
-func RequestFiles(conn net.Conn, data chan byte, filelist *FileList, os *minio.Client, module string, ppath string) {
+func RequestFiles(conn net.Conn, data chan byte, filelist *FileList, os *minio.Client, module string, prepath string) {
 	empty := make([]byte, 16)	// 4 + 4 + 4 + 4 bytes
 	for i:=0; i < len(*filelist); i++ {
+		// TODO: Supports more file mode
 		if (*filelist)[i].Mode == 0100644 {
 			binary.Write(conn, binary.LittleEndian, int32(i))
 
@@ -198,7 +199,7 @@ func RequestFiles(conn net.Conn, data chan byte, filelist *FileList, os *minio.C
 	log.Println("Request completed")
 	// Finish
 	binary.Write(conn, binary.LittleEndian, int32(-1))
-	Downloader(data, filelist, os, module, ppath)
+	Downloader(data, filelist, os, module, prepath)
 }
 
 func RequestAFile(conn net.Conn, target string, filelist *FileList) {
@@ -235,7 +236,18 @@ func RequestAFile(conn net.Conn, target string, filelist *FileList) {
 	binary.Write(conn, binary.LittleEndian, int32(-1))
 }
 
-func Downloader(data chan byte, filelist *FileList, os *minio.Client, module string, ppath string) {
+func Downloader(data chan byte, filelist *FileList, os *minio.Client, module string, prepath string) {
+
+	//pre-path shouldn't use "/" as prefix, and must have a "/" suffix
+	//pre-path can be: "xx", "xx/", "/xx", "/xx/", "", "/"
+	ppath := prepath
+	if !strings.HasSuffix(ppath, "/") {
+		ppath += "/"
+	}
+	if strings.HasPrefix(ppath, "/") {
+		ppath = ppath[1:]
+	}
+
 	for {
 		index := GetInteger(data)
 		if index == -1 {
@@ -267,7 +279,7 @@ func Downloader(data chan byte, filelist *FileList, os *minio.Client, module str
 		}
 
 		// Put file to object storage
-		n, err := os.PutObject(module, (ppath+path)[1:], buf, int64(buf.Len()), minio.PutObjectOptions{})
+		n, err := os.PutObject(module, ppath+path, buf, int64(buf.Len()), minio.PutObjectOptions{})
 		if err != nil {
 			log.Fatalln(err)
 		}
