@@ -1,0 +1,11 @@
+syntax = "proto3";
+package proto;
+
+option go_package = "github.com/kaiakz/rsync2os/filelist";
+
+message FInfo {
+    int64 Size = 1;
+    int32 Mtime = 2;
+    int32 Mode = 3;
+    // hash 16bytes
+}

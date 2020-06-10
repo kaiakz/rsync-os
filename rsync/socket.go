@@ -3,11 +3,12 @@ package rsync
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"net"
 	"strconv"
 	"strings"
 )
+
+/* Raw data from socket */
 
 func ReadLine(conn net.Conn) (string, error) {
 	ch := make([]byte, 1)
@@ -63,28 +64,24 @@ func ReadShort(conn net.Conn) int16 {
 func ReadByte(conn net.Conn) byte {
 	data := make([]byte, 1)
 	conn.Read(data)
-	fmt.Println(data)
 	return data[0]
 }
 
 func ReadUint8(conn net.Conn) uint8 {
 	data := make([]byte, 1)
 	conn.Read(data)
-	fmt.Println(data)
 	return uint8(data[0])
 }
 
 func ReadInteger(conn net.Conn) int32 {
 	data := make([]byte, 4)
 	conn.Read(data)
-	fmt.Println(data)
 	return int32(binary.LittleEndian.Uint32(data))
 }
 
 func ReadLong(conn net.Conn) int64 {
 	data := make([]byte, 8)
 	conn.Read(data)
-	fmt.Println(data)
 	return int64(binary.LittleEndian.Uint64(data))
 }
 
