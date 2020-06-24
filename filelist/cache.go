@@ -15,9 +15,12 @@ type Cache struct {
 func Open(module string, prepath string) {
 	db, err := bolt.Open("r.db", 0666, nil)
 	if err != nil {
-		//return err
+		return
 	}
 	tx, err := db.Begin(true)
+	if tx == nil {
+		return
+	}
 	defer tx.Rollback()
 
 	_, err = tx.CreateBucketIfNotExists([]byte(module))
@@ -46,6 +49,16 @@ func (cache *Cache) Get(key []byte) *FInfo {
 		err := proto.Unmarshal(value, info)
 		if err == nil {
 			return info
+		}
+	}
+	return nil
+}
+
+func (cache *Cache) PutAll(list *rsync.FileList) error {
+	for _, info := range *list {
+		err := cache.Put(&info);
+		if err != nil {
+			return err
 		}
 	}
 	return nil
