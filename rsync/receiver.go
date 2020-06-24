@@ -4,16 +4,16 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"github.com/minio/minio-go/v6"
 	"io"
 	"log"
 	"net"
 	"strings"
+
+	"github.com/minio/minio-go/v6"
 )
 
 // Header: '@RSYNCD: 31.0\n' + ? + '\n' + arguments + '\0'
 // Header len 8		AUTHREQD: 18	"@RSYNCD: EXIT" 13		RSYNC_MODULE_LIST_QUERY "\n"
-
 
 // See clienserver.c start_inband_exchange
 func HandShake(conn net.Conn, module string, path string) {
@@ -64,10 +64,10 @@ func HandShake(conn net.Conn, module string, path string) {
 }
 
 type FileInfo struct {
-	Path string
-	Size int64
+	Path  string
+	Size  int64
 	Mtime int32
-	Mode int32
+	Mode  int32
 }
 
 type FileList []FileInfo
@@ -90,7 +90,7 @@ func (I FileList) Swap(i, j int) {
 // file list: ends with '\0'
 func GetFileList(data chan byte, filelist *FileList) error {
 
-	flags := <- data
+	flags := <-data
 
 	var partial, pathlen uint32 = 0, 0
 
@@ -128,14 +128,13 @@ func GetFileList(data chan byte, filelist *FileList) error {
 
 	// last := (*filelist)[len(*filelist) - 1]	// FIXME
 
-
 	p := make([]byte, pathlen)
 	GetBytes(data, p)
 	var path string
 	/* If so, use last */
-	if (0x20 & flags) != 0 {	// FLIST_NAME_SAME
-		last := (*filelist)[len(*filelist) - 1]
-		path = last.Path[0: partial]
+	if (0x20 & flags) != 0 { // FLIST_NAME_SAME
+		last := (*filelist)[len(*filelist)-1]
+		path = last.Path[0:partial]
 	}
 	path += string(p)
 	log.Println("Path ", path)
@@ -149,7 +148,7 @@ func GetFileList(data chan byte, filelist *FileList) error {
 		mtime = GetInteger(data)
 
 	} else {
-		mtime = (*filelist)[len(*filelist) - 1].Mtime
+		mtime = (*filelist)[len(*filelist)-1].Mtime
 	}
 	log.Println("MTIME ", mtime)
 
@@ -159,7 +158,7 @@ func GetFileList(data chan byte, filelist *FileList) error {
 		mode = GetInteger(data)
 
 	} else {
-		mode = (*filelist)[len(*filelist) - 1].Mode
+		mode = (*filelist)[len(*filelist)-1].Mode
 	}
 	log.Println("Mode", uint32(mode))
 
@@ -184,8 +183,8 @@ func GetFileList(data chan byte, filelist *FileList) error {
 /* Generator */
 
 func RequestFiles(conn net.Conn, data chan byte, filelist *FileList, os *minio.Client, module string, prepath string) {
-	empty := make([]byte, 16)	// 4 + 4 + 4 + 4 bytes
-	for i:=0; i < len(*filelist); i++ {
+	empty := make([]byte, 16) // 4 + 4 + 4 + 4 bytes
+	for i := 0; i < len(*filelist); i++ {
 		// TODO: Supports more file mode
 		if (*filelist)[i].Mode == 0100644 {
 			binary.Write(conn, binary.LittleEndian, int32(i))
@@ -209,8 +208,8 @@ func RequestAFile(conn net.Conn, target string, filelist *FileList) {
 
 	// TODO: Supports multi files
 	// For test: here we request a file
-	for i:=0; i < len(*filelist); i++ {
-		if strings.Contains((*filelist)[i].Path, target) {	// 0ad-data-0.0.22-1.el7.src.rpm95533 SRPMS/Packages/z/zanata-python-client-1.5.1-1.el7.src.rpmSRPMS/Packages/0/0ad-0.0.22-1.el7.src.rpm
+	for i := 0; i < len(*filelist); i++ {
+		if strings.Contains((*filelist)[i].Path, target) { // 0ad-data-0.0.22-1.el7.src.rpm95533 SRPMS/Packages/z/zanata-python-client-1.5.1-1.el7.src.rpmSRPMS/Packages/0/0ad-0.0.22-1.el7.src.rpm
 			idx = int32(i)
 			log.Println("Pick:", (*filelist)[i], idx)
 			break
@@ -222,8 +221,8 @@ func RequestAFile(conn net.Conn, target string, filelist *FileList) {
 
 	// block count, block length(default is 32768?), checksum length(default is 2?), block remainder, blocks(short+long)
 	// Just let them be empty(zero)
-	empty := make([]byte, 16)	// 4 + 4 + 4 + 4 bytes
-	conn.Write(empty)	// ENDIAN?
+	empty := make([]byte, 16) // 4 + 4 + 4 + 4 bytes
+	conn.Write(empty)         // ENDIAN?
 
 	//conn.Write(empty)
 	//binary.Write(conn, binary.LittleEndian, int32(0))	// 32768
@@ -238,15 +237,7 @@ func RequestAFile(conn net.Conn, target string, filelist *FileList) {
 
 func Downloader(data chan byte, filelist *FileList, os *minio.Client, module string, prepath string) {
 
-	//pre-path shouldn't use "/" as prefix, and must have a "/" suffix
-	//pre-path can be: "xx", "xx/", "/xx", "/xx/", "", "/"
-	ppath := prepath
-	if !strings.HasSuffix(ppath, "/") {
-		ppath += "/"
-	}
-	if strings.HasPrefix(ppath, "/") {
-		ppath = ppath[1:]
-	}
+	ppath := TrimPrepath(prepath)
 
 	for {
 		index := GetInteger(data)
@@ -255,10 +246,10 @@ func Downloader(data chan byte, filelist *FileList, os *minio.Client, module str
 		}
 		fmt.Println("INDEX:", index)
 		path := (*filelist)[index].Path
-		count := GetInteger(data)  /* block count */
-		blen := GetInteger(data)  /* block length */
-		clen := GetInteger(data)  /* checksum length */
-		remainder := GetInteger(data)  /* block remainder */
+		count := GetInteger(data)     /* block count */
+		blen := GetInteger(data)      /* block length */
+		clen := GetInteger(data)      /* checksum length */
+		remainder := GetInteger(data) /* block remainder */
 
 		log.Println(path, count, blen, clen, remainder, (*filelist)[index].Size)
 		buf := new(bytes.Buffer)
@@ -295,9 +286,9 @@ func Downloader(data chan byte, filelist *FileList, os *minio.Client, module str
 
 // a block: [file id + block checksum + '\0']
 func exchangeBlock() {
-// Here we get a list stores old files
-// Rolling Checksum & Hash value
-// Loop until all file are updated, each time handle a file.
+	// Here we get a list stores old files
+	// Rolling Checksum & Hash value
+	// Loop until all file are updated, each time handle a file.
 	// Send a empty signature block (no Rolling Checksum & Hash value)
 	// Download the data blocks, and write them into a file
 }

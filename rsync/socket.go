@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"net"
-	"strconv"
-	"strings"
 )
 
 /* Raw data from socket */
@@ -86,7 +84,7 @@ func ReadLong(conn net.Conn) int64 {
 }
 
 func ReadExact(conn net.Conn, b []byte) (int, error) {
-	for i:= 0; i < len(b); {
+	for i := 0; i < len(b); {
 		n, err := conn.Read(b[i:])
 		if err != nil {
 			return n, err
@@ -94,96 +92,4 @@ func ReadExact(conn net.Conn, b []byte) (int, error) {
 		i += n
 	}
 	return len(b), nil
-}
-
-
-func SplitURIS(uri string) (string, int, string, string, error){
-
-	var host, module, path string
-	var first = []byte(uri)
-	var second []byte
-
-	if strings.HasPrefix(uri, "rsync://") {
-		/* rsync://host[:port]/module[/path] */
-		first = first[8:]
-		i := bytes.IndexByte(first, '/')
-		if i == -1 {
-			// No module name
-			panic("No module name")
-		}
-		second = first[i+1:]	//ignore '/'
-		first = first[:i]
-	} else {
-		// Only for remote
-		/* host::module[/path] */
-		panic("No implement yet")
-	}
-
-	port := 873		// Default port: 873
-
-	// Parse port
-	i := bytes.IndexByte(first, ':')
-	if i != -1  {
-		var err error
-		port, err = strconv.Atoi(string(first[i+1:]))
-		if err != nil {
-			// Wrong port
-			panic("Wrong port")
-		}
-		first = first[:i]
-	}
-	host = string(first)
-
-	// Parse path
-	i = bytes.IndexByte(second, '/')
-	if i != -1 {
-		path = string(second[i:])
-		second = second[:i]
-	}
-	module = string(second)
-
-	return host, port, module, path, nil
-
-}
-
-// For rsync
-func SplitURI(uri string) (string, string, string, error){
-
-	var address, module, path string
-	var first = []byte(uri)
-	var second []byte
-
-	if strings.HasPrefix(uri, "rsync://") {
-		/* rsync://host[:port]/module[/path] */
-		first = first[8:]
-		i := bytes.IndexByte(first, '/')
-		if i == -1 {
-			// No module name
-			panic("No module name")
-		}
-		second = first[i+1:]	//ignore '/'
-		first = first[:i]
-	} else {
-		// Only for remote
-		/* host::module[/path] */
-		panic("No implement yet")
-	}
-
-	address = string(first)
-	// Parse port
-	i := bytes.IndexByte(first, ':')
-	if i == -1  {
-		address += ":873"	// Default port: 873
-	}
-
-	// Parse path
-	i = bytes.IndexByte(second, '/')
-	if i != -1 {
-		path = string(second[i:])
-		second = second[:i]
-	}
-	module = string(second)
-
-	return address, module, path, nil
-
 }

@@ -10,14 +10,15 @@ package main
 
 import (
 	"fmt"
-	"github.com/minio/minio-go/v6"
 	"io"
 	"log"
 	"net"
+	"rsync2os/filelist"
 	"rsync2os/rsync"
 	"sort"
-)
 
+	"github.com/minio/minio-go/v6"
+)
 
 func Client(uri string) {
 
@@ -40,28 +41,31 @@ func Client(uri string) {
 	// fmt.Println(readInteger(conn))
 	log.Println("HandShake OK")
 
-	data := make(chan byte, 16 * 1024 * 1024)
-
+	data := make(chan byte, 16*1024*1024)
 
 	// Start De-Multiplexing
 	go rsync.DeMuxChan(conn, data)
 
-	filelist := make(rsync.FileList, 0, 4096)
+	filelist1 := make(rsync.FileList, 0, 4096)
 	// recv_file_list
 	for {
-		if rsync.GetFileList(data, &filelist) == io.EOF {
+		if rsync.GetFileList(data, &filelist1) == io.EOF {
 			break
 		}
 	}
-	log.Println("File List Received, total size is", len(filelist))
+	log.Println("File List Received, total size is", len(filelist1))
 
 	ioerr := rsync.GetInteger(data)
 	log.Println("IOERR", ioerr)
 
 	// Sort the filelist lexicographically
-	sort.Sort(filelist)
+	sort.Sort(filelist1)
 
+	ppath := rsync.TrimPrepath(path)
+	filelist.Save(&filelist1, module, ppath)
+	log.Println("File List Saved")
 
+	return
 
 	// Init the object storage
 	// For test
@@ -92,11 +96,9 @@ func Client(uri string) {
 	//rsync.RequestAFile(conn, "libnemo-extension1_1.8.1+maya_amd64.deb", &filelist)
 	//rsync.GetFiles(data, conn, &filelist)
 
-	rsync.RequestFiles(conn, data, &filelist, minioClient, module, path)
+	// rsync.RequestFiles(conn, data, &filelist, minioClient, module, path)
 	//go rsync.Downloader(data, &filelist)
 	//fmt.Println(filelist)
-
-
 
 }
 
@@ -107,5 +109,3 @@ func main() {
 	//Client("rsync://rsync.mirrors.ustc.edu.cn/repo/monitoring-plugins")
 	//	rsync://rsync.monitoring-plugins.org/plugins/
 }
-
-

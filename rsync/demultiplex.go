@@ -3,9 +3,11 @@ package rsync
 import (
 	"bytes"
 	"encoding/binary"
+	"io"
+
 	"github.com/minio/minio-go/v6"
 	"golang.org/x/crypto/md4"
-	"io"
+
 	//"io/ioutil"
 	"log"
 	"net"
@@ -31,7 +33,7 @@ import (
 // Buffer version
 type DeMuxer struct {
 	conn net.Conn
-	buf bytes.Buffer
+	buf  bytes.Buffer
 }
 
 func RunDeMuxer(conn net.Conn) *DeMuxer {
@@ -39,23 +41,23 @@ func RunDeMuxer(conn net.Conn) *DeMuxer {
 	go DeMuxBuf(conn, buf)
 	return &DeMuxer{
 		conn: conn,
-		buf: *buf,
+		buf:  *buf,
 	}
 }
 
 // Deprecated
-func DeMuxBuf(conn net.Conn, buf *bytes.Buffer)  {
+func DeMuxBuf(conn net.Conn, buf *bytes.Buffer) {
 	for {
 		// socket read the multipex data & put them to channel
-		header := make([]byte, 4)		// Header size: 4 bytes
+		header := make([]byte, 4) // Header size: 4 bytes
 		n, err := ReadExact(conn, header)
 
 		if n != 4 || err != nil {
 			return
 		}
 
-		tag := header[3]	// Little Endian
-		size := (binary.LittleEndian.Uint32(header) & 0xffffff)		// TODO: zero?
+		tag := header[3]                                        // Little Endian
+		size := (binary.LittleEndian.Uint32(header) & 0xffffff) // TODO: zero?
 
 		log.Println("TAG", tag, "SIZE", size)
 
@@ -64,13 +66,11 @@ func DeMuxBuf(conn net.Conn, buf *bytes.Buffer)  {
 
 			_, err := ReadExact(conn, body)
 
-			if err == io.EOF {	// Finish
+			if err == io.EOF { // Finish
 				return
 			}
 
-
-
-		} else {	// out-of-band data
+		} else { // out-of-band data
 			//otag := tag - 7
 
 		}
@@ -80,45 +80,43 @@ func DeMuxBuf(conn net.Conn, buf *bytes.Buffer)  {
 // Deprecated
 func DeMultiplex(conn net.Conn) error {
 	// socket read the multipex data & put them to channel
-		header := make([]byte, 4)		// Header size: 4 bytes
+	header := make([]byte, 4) // Header size: 4 bytes
 
-		n, err := ReadExact(conn, header)
-		if n != 4 || err != nil {
-			return io.ErrUnexpectedEOF
+	n, err := ReadExact(conn, header)
+	if n != 4 || err != nil {
+		return io.ErrUnexpectedEOF
+	}
+
+	tag := header[3]                                        // Little Endian
+	size := (binary.LittleEndian.Uint32(header) & 0xffffff) // TODO: zero?
+
+	log.Println("TAG", tag, "SIZE", size)
+
+	if tag == 7 {
+		body := make([]byte, size)
+
+		_, err := ReadExact(conn, body)
+
+		if err == io.EOF { // Finish
+			return err
 		}
 
-		tag := header[3]	// Little Endian
-		size := (binary.LittleEndian.Uint32(header) & 0xffffff)		// TODO: zero?
+		log.Println(body)
 
-		log.Println("TAG", tag, "SIZE", size)
+		//if (body[size-1] | body[size-2] | body[size-3] | body[size-4] | body[size-5]) == 0 {
+		//	fmt.Println("END")
+		//	return io.EOF
+		//}
 
-		if tag == 7 {
-			body := make([]byte, size)
+		//for _, b := range body {
+		//	data <- b
+		//}
 
-			_, err := ReadExact(conn, body)
+	} else { // out-of-band data
+		//otag := tag - 7
 
-			if err == io.EOF {	// Finish
-				return err
-			}
-
-			log.Println(body)
-
-			//if (body[size-1] | body[size-2] | body[size-3] | body[size-4] | body[size-5]) == 0 {
-			//	fmt.Println("END")
-			//	return io.EOF
-			//}
-
-
-
-			//for _, b := range body {
-			//	data <- b
-			//}
-
-		} else {	// out-of-band data
-			//otag := tag - 7
-
-		}
-		return nil
+	}
+	return nil
 }
 
 // Goroutine: Demultiplex the package, and push them to channel
@@ -126,24 +124,26 @@ func DeMultiplex(conn net.Conn) error {
 func DeMuxChan(conn net.Conn, data chan byte) {
 	for {
 		// socket read the multipex data & put them to channel
-		header := make([]byte, 4)		// Header size: 4 bytes
+		header := make([]byte, 4) // Header size: 4 bytes
 
 		n, err := ReadExact(conn, header)
 		if n != 4 || err != nil {
-			panic("Mulitplex: Check your wired protocol")
+			// panic("Mulitplex: Check your wired protocol")
+			log.Println("Mulitplex: Check your wired protocol")
+			return
 		}
 
-		tag := header[3]	// Little Endian
-		size := (binary.LittleEndian.Uint32(header) & 0xffffff)		// TODO: zero?
+		tag := header[3]                                        // Little Endian
+		size := (binary.LittleEndian.Uint32(header) & 0xffffff) // TODO: zero?
 
 		log.Println("*****TAG", tag, "SIZE", size, "*****")
 
-		if tag == 7 {	// MUL_BASE + MSG_DATA
+		if tag == 7 { // MUL_BASE + MSG_DATA
 			body := make([]byte, size)
 
 			_, err := ReadExact(conn, body)
 
-			if err == io.EOF {	// Finish
+			if err == io.EOF { // Finish
 				panic("EOF")
 			}
 
@@ -151,7 +151,7 @@ func DeMuxChan(conn net.Conn, data chan byte) {
 				data <- b
 			}
 
-		} else {	// out-of-band data
+		} else { // out-of-band data
 			//otag := tag - 7
 			panic("Error")
 		}
@@ -160,13 +160,13 @@ func DeMuxChan(conn net.Conn, data chan byte) {
 
 // Blocking: copy len(b) bytes from channel to b
 func GetBytes(data chan byte, b []byte) {
-	for i:=0; i < len(b); i++ {
-		b[i] = <- data
+	for i := 0; i < len(b); i++ {
+		b[i] = <-data
 	}
 }
 
 func GetShort(data chan byte) int16 {
-	val:= make([]byte, 2)
+	val := make([]byte, 2)
 	GetBytes(data, val)
 	return int16(binary.LittleEndian.Uint16(val))
 }
@@ -176,7 +176,7 @@ func GetByte(data chan byte) byte {
 }
 
 func GetUint8(data chan byte) uint8 {
-	return uint8(<- data)
+	return uint8(<-data)
 }
 
 func GetInteger(data chan byte) int32 {
@@ -215,7 +215,7 @@ func GetFiles(data chan byte, conn net.Conn, filelist *FileList) {
 }
 
 func lookup(size int64, filelist *FileList) {
-	for i,f := range(*filelist) {
+	for i, f := range *filelist {
 		if f.Size == size {
 			log.Println("True File:", i, f)
 		}
@@ -227,10 +227,10 @@ func GetFile(data chan byte, index int32, filelist *FileList) {
 
 	path := (*filelist)[index].Path
 
-	count := GetInteger(data)  /* block count */
-	blen := GetInteger(data)  /* block length */
-	clen := GetInteger(data)  /* checksum length */
-	remainder := GetInteger(data)  /* block remainder */
+	count := GetInteger(data)     /* block count */
+	blen := GetInteger(data)      /* block length */
+	clen := GetInteger(data)      /* checksum length */
+	remainder := GetInteger(data) /* block remainder */
 
 	log.Println(path, count, blen, clen, remainder, (*filelist)[index].Size)
 	buf := new(bytes.Buffer)
