@@ -1,4 +1,4 @@
-package filelist
+package fldb
 
 import (
 	"rsync2os/rsync"

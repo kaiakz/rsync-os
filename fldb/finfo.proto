@@ -1,7 +1,7 @@
 syntax = "proto3";
 package proto;
 
-option go_package = "github.com/kaiakz/rsync2os/filelist";
+option go_package = "github.com/kaiakz/rsync2os/fldb";
 
 message FInfo {
     int64 Size = 1;

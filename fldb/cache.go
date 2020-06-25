@@ -1,4 +1,4 @@
-package filelist
+package fldb
 
 import (
 	"fmt"
@@ -115,7 +115,7 @@ func Save(list *rsync.FileList, module string, prepath string) {
 			fmt.Println("key= ", string(k))
 			var m FInfo
 			proto.Unmarshal(v, &m)
-			fmt.Println(m.Mtime, m.Size)
+			fmt.Println(m.GetMtime(), m.GetSize())
 		}
 
 		return nil
