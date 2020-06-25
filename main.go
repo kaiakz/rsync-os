@@ -13,14 +13,14 @@ import (
 	"io"
 	"log"
 	"net"
-	"rsync2os/filelist"
+	"rsync2os/fldb"
 	"rsync2os/rsync"
 	"sort"
 
 	"github.com/minio/minio-go/v6"
 )
 
-func Client(uri string) {
+func Socket(uri string) {
 
 	addr, module, path, _ := rsync.SplitURI(uri)
 
@@ -46,23 +46,23 @@ func Client(uri string) {
 	// Start De-Multiplexing
 	go rsync.DeMuxChan(conn, data)
 
-	filelist1 := make(rsync.FileList, 0, 4096)
+	filelist := make(rsync.FileList, 0, 4096)
 	// recv_file_list
 	for {
-		if rsync.GetFileList(data, &filelist1) == io.EOF {
+		if rsync.GetFileList(data, &filelist) == io.EOF {
 			break
 		}
 	}
-	log.Println("File List Received, total size is", len(filelist1))
+	log.Println("File List Received, total size is", len(filelist))
 
 	ioerr := rsync.GetInteger(data)
 	log.Println("IOERR", ioerr)
 
 	// Sort the filelist lexicographically
-	sort.Sort(filelist1)
+	sort.Sort(filelist)
 
 	ppath := rsync.TrimPrepath(path)
-	filelist.Save(&filelist1, module, ppath)
+	fldb.Save(&filelist, module, ppath)
 	log.Println("File List Saved")
 
 	return
@@ -104,7 +104,7 @@ func Client(uri string) {
 
 func main() {
 	//FIXME: Can't handle wrong module/path rsync://mirrors.tuna.tsinghua.edu.cn/linuxmint-packages/pool/romeo/libf/libfm/
-	Client("rsync://mirrors.tuna.tsinghua.edu.cn/elvish")
+	Socket("rsync://mirrors.tuna.tsinghua.edu.cn/elvish")
 	//Client("rsync://rsync.monitoring-plugins.org/plugins/")
 	//Client("rsync://rsync.mirrors.ustc.edu.cn/repo/monitoring-plugins")
 	//	rsync://rsync.monitoring-plugins.org/plugins/
