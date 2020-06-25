@@ -115,7 +115,7 @@ func Save(list *rsync.FileList, module string, prepath string) {
 			fmt.Println("key= ", string(k))
 			var m FInfo
 			proto.Unmarshal(v, &m)
-			fmt.Println(m)
+			fmt.Println(m.Mtime, m.Size)
 		}
 
 		return nil

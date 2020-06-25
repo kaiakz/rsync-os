@@ -292,3 +292,11 @@ func exchangeBlock() {
 	// Send a empty signature block (no Rolling Checksum & Hash value)
 	// Download the data blocks, and write them into a file
 }
+
+func FinalPhase(conn net.Conn, data chan byte) {
+
+	binary.Write(conn, binary.LittleEndian, int32(-1))
+	ioerror := GetInteger(data)
+	fmt.Println(ioerror)
+
+}
