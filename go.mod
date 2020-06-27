@@ -1,4 +1,4 @@
-module rsync2os
+module rsync-os
 
 go 1.14
 

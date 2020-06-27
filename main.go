@@ -13,8 +13,8 @@ import (
 	"io"
 	"log"
 	"net"
-	"rsync2os/fldb"
-	"rsync2os/rsync"
+	"rsync-os/fldb"
+	"rsync-os/rsync"
 	"sort"
 
 	"github.com/minio/minio-go/v6"

@@ -1,7 +1,7 @@
 package fldb
 
 import (
-	"rsync2os/rsync"
+	"rsync-os/rsync"
 )
 
 // Diff two sorted list
