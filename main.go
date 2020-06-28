@@ -105,7 +105,7 @@ func Socket(uri string) {
 func main() {
 	//FIXME: Can't handle wrong module/path rsync://mirrors.tuna.tsinghua.edu.cn/linuxmint-packages/pool/romeo/libf/libfm/
 	Socket("rsync://mirrors.tuna.tsinghua.edu.cn/elvish")
-	//Client("rsync://rsync.monitoring-plugins.org/plugins/")
-	//Client("rsync://rsync.mirrors.ustc.edu.cn/repo/monitoring-plugins")
-	//	rsync://rsync.monitoring-plugins.org/plugins/
+	// rsync://rsync.monitoring-plugins.org/plugins/
+	// rsync://rsync.mirrors.ustc.edu.cn/repo/monitoring-plugins
+	// rsync://rsync.monitoring-plugins.org/plugins/
 }

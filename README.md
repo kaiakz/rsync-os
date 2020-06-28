@@ -3,6 +3,20 @@
 
 ![client](https://raw.githubusercontent.com/kaiakz/rsync2os/master/docs/client.jpg)
 
+## Usage
+### minio
+1. install & run minio, you need to configure your setting of minio in the main.go.
+2. go run main.go
+
+## Roadmap
+### Client
+- [x] Parse rsync://
+- [x] Connect to rsync server
+- [x] Hand shake
+- [x] Send argument list
+- [x] Fetch the file list
+- [x] Request & download files
+
 ## Why we don't need block checksum?
 Rsync requires random reading and writing of files to do the block exchange. But object storage does not support that.
 rsync-os simplifies the rsync algorithm to avoid random reading and writing. When a file needs to be updated, we just download the entire file from the server and then replace it.
@@ -23,10 +37,7 @@ The rsync server sends the entire file as a stream of bytes.
 ## Multiplex & De-Multiplex
 ![de-multiplex](https://raw.githubusercontent.com/kaiakz/rsync2os/master/docs/demux.jpg)
 
-## How to use the demo?
-### Use minio
-1. install & run minio, you need to configure your setting of minio in the main.go.
-2. go run main.go
+### Limitations
 
 # Reference
 * https://git.samba.org/?p=rsync.git

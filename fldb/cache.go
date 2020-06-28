@@ -13,7 +13,7 @@ type Cache struct {
 }
 
 func Open(module string, prepath string) *Cache {
-	db, err := bolt.Open("r.db", 0666, nil)
+	db, err := bolt.Open("test.db", 0666, nil)
 	if err != nil {
 		return nil
 	}
