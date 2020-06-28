@@ -36,7 +36,11 @@ func Socket(uri string) {
 
 	defer conn.Close()
 
-	rsync.HandShake(conn, module, path)
+	c := &rsync.Client{
+		Conn: conn,
+	}
+
+	c.HandShake(module, path)
 
 	// fmt.Println(readInteger(conn))
 	log.Println("HandShake OK")

@@ -12,39 +12,56 @@ import (
 	"github.com/minio/minio-go/v6"
 )
 
+type Client struct {
+	Conn    net.Conn
+	DemuxIn chan byte
+	CksSeed int32
+	// Options
+}
+
 // Header: '@RSYNCD: 31.0\n' + ? + '\n' + arguments + '\0'
 // Header len 8		AUTHREQD: 18	"@RSYNCD: EXIT" 13		RSYNC_MODULE_LIST_QUERY "\n"
 
 // See clienserver.c start_inband_exchange
-func HandShake(conn net.Conn, module string, path string) {
+func (c *Client) HandShake(module string, path string) {
 	// send my version
 	// send("@RSYNCD: 31.0\n");
-	conn.Write([]byte("@RSYNCD: 27.0\n"))
+	c.Conn.Write([]byte("@RSYNCD: 27.0\n"))
 
 	// receive server's protocol version and seed
-	version_str, _ := ReadLine(conn)
+	versionStr, _ := ReadLine(c.Conn)
 
 	// recv(version)
-	var remote_protocol, remote_sub int
-	fmt.Sscanf(version_str, "@RSYNCD: %d.%d", remote_protocol, remote_sub)
-	log.Println(version_str)
+	var remoteProtocol, remoteProtocolSub int
+	fmt.Sscanf(versionStr, "@RSYNCD: %d.%d", remoteProtocol, remoteProtocolSub)
+	log.Println(versionStr)
 
 	// send mod name
 	// send("Foo\n")
-	conn.Write([]byte(module))
-	conn.Write([]byte("\n"))
+	c.Conn.Write([]byte(module))
+	c.Conn.Write([]byte("\n"))
 	//conn.Write([]byte("epel\n"))
 	// conn.Write([]byte("\n"))
 
 	for {
 		// Wait for '@RSYNCD: OK': until \n, then add \0
-		res, _ := ReadLine(conn)
+		res, _ := ReadLine(c.Conn)
 		log.Print(res)
 		if strings.Contains(res, "@RSYNCD: OK") {
 			break
 		}
 	}
 
+	c.SendArgs(module, path)
+
+	// read int32 as seed
+	c.CksSeed = ReadInteger(c.Conn)
+	log.Println("SEED", c.CksSeed)
+
+	c.SendEmptyExclusion()
+}
+
+func (c *Client) SendArgs(module string, path string) {
 	// send parameters list
 	//conn.Write([]byte("--server\n--sender\n-g\n-l\n-o\n-p\n-D\n-r\n-t\n.\nepel/7/SRPMS\n\n"))
 	//conn.Write([]byte("--server\n--sender\n-l\n-p\n-r\n-t\n.\nepel/7/SRPMS\n\n"))	// without gid, uid, mdev
@@ -53,14 +70,42 @@ func HandShake(conn net.Conn, module string, path string) {
 	args.Write([]byte(module))
 	args.Write([]byte(path))
 	args.Write([]byte("\n\n"))
-	conn.Write(args.Bytes())
+	c.Conn.Write(args.Bytes())
+}
 
-	// read int32 as seed
-	bseed := ReadInteger(conn)
-	log.Println("SEED", bseed)
+func (c *Client) ListOnly(module string, path string) {
+	c.Conn.Write([]byte("@RSYNCD: 27.0\n"))
+	versionStr, _ := ReadLine(c.Conn)
+	// var remoteProtocol, remoteProtocolSub int
+	// fmt.Sscanf(versionStr, "@RSYNCD: %d.%d", remoteProtocol, remoteProtocolSub)
+	log.Println(versionStr)
+	c.Conn.Write([]byte(module))
+	c.Conn.Write([]byte("\n"))
+	for {
+		// Wait for '@RSYNCD: OK': until \n, then add \0
+		res, _ := ReadLine(c.Conn)
+		log.Print(res)
+		if strings.Contains(res, "@RSYNCD: OK") {
+			break
+		}
+	}
+	args := new(bytes.Buffer)
+	args.Write([]byte("--server\n--sender\n-l\n-p\n-r\n-t\n.\n"))
+	args.Write([]byte(module))
+	args.Write([]byte(path))
+	args.Write([]byte("\n\n"))
 
+	c.Conn.Write(args.Bytes())
+
+	seed := ReadInteger(c.Conn)
+	log.Println("SEED", seed)
+
+	c.Conn.Write(make([]byte, 4))
+}
+
+func (c *Client) SendEmptyExclusion() {
 	// send filter_list, empty is 32-bit zero
-	conn.Write([]byte("\x00\x00\x00\x00"))
+	c.Conn.Write([]byte("\x00\x00\x00\x00"))
 }
 
 type FileInfo struct {
