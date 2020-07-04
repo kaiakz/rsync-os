@@ -1,7 +1,7 @@
 # RSYNC-OS
-## A rsync gateway for object storage.
+## A rsync-compatible tool for object storage.
 
-![client](https://raw.githubusercontent.com/kaiakz/rsync2os/master/docs/client.jpg)
+![client](https://raw.githubusercontent.com/kaiakz/rsync-os/master/docs/client.jpg)
 
 ## Usage
 ### minio
@@ -22,7 +22,7 @@ Rsync requires random reading and writing of files to do the block exchange. But
 rsync-os simplifies the rsync algorithm to avoid random reading and writing. When a file needs to be updated, we just download the entire file from the server and then replace it.
 
 ## HandShake
-rysnc-os uses rsync protocol 27. 
+rysnc-os supports rsync protocol 27. 
 It sends the arguments "--server--sender-l-p-r-t" to the remote rsyncd by default.
 
 ## The File List
@@ -35,7 +35,7 @@ rsync-os always saves the file list in its database(local file list). rsync2os d
 The rsync server sends the entire file as a stream of bytes.
 
 ## Multiplex & De-Multiplex
-![de-multiplex](https://raw.githubusercontent.com/kaiakz/rsync2os/master/docs/demux.jpg)
+![de-multiplex](https://raw.githubusercontent.com/kaiakz/rsync-os/master/docs/demux.jpg)
 
 ### Limitations
 
