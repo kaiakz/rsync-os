@@ -76,9 +76,8 @@ func (c *Client) SendArgs(module string, path string) {
 func (c *Client) ListOnly(module string, path string) {
 	c.Conn.Write([]byte("@RSYNCD: 27.0\n"))
 	versionStr, _ := ReadLine(c.Conn)
-	// var remoteProtocol, remoteProtocolSub int
-	// fmt.Sscanf(versionStr, "@RSYNCD: %d.%d", remoteProtocol, remoteProtocolSub)
 	log.Println(versionStr)
+
 	c.Conn.Write([]byte(module))
 	c.Conn.Write([]byte("\n"))
 	for {
@@ -98,7 +97,7 @@ func (c *Client) ListOnly(module string, path string) {
 	c.Conn.Write(args.Bytes())
 
 	seed := ReadInteger(c.Conn)
-	log.Println("SEED", seed)
+	log.Println("SEED: ", seed)
 
 	c.Conn.Write(make([]byte, 4))
 }

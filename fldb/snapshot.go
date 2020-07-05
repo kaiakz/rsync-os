@@ -9,7 +9,7 @@ import (
 )
 
 // Test
-func Save(list *rsync.FileList, module string, prepath string) {
+func Snapshot(list rsync.FileList, module string, prepath string) {
 	db, err := bolt.Open("test.db", 0666, nil)
 	if err != nil {
 		return
@@ -21,7 +21,7 @@ func Save(list *rsync.FileList, module string, prepath string) {
 			log.Panicln("create module as bucket failed", err)
 			return err
 		}
-		for _, info := range *list {
+		for _, info := range list {
 			key := []byte(prepath + info.Path)
 			value, err := proto.Marshal(&FInfo{
 				Size:  info.Size,
@@ -32,7 +32,10 @@ func Save(list *rsync.FileList, module string, prepath string) {
 				log.Println("Marshal failed", err)
 				return err
 			}
-			bucket.Put(key, value)
+			err = bucket.Put(key, value)
+			if err != nil {
+				return err
+			}
 		}
 		return nil
 	})

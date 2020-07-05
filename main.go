@@ -66,7 +66,15 @@ func Socket(uri string) {
 	sort.Sort(filelist)
 
 	ppath := rsync.TrimPrepath(path)
-	fldb.Save(&filelist, module, ppath)
+	//fldb.Snapshot(filelist[:], module, ppath)
+	cache := fldb.Open([]byte(module), []byte(ppath))
+	if cache == nil {
+
+	}
+	downloadList, deleteList := cache.Diff(filelist[:])
+	fmt.Println(downloadList)
+	fmt.Println(deleteList)
+
 	log.Println("File List Saved")
 
 	return
