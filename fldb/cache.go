@@ -22,6 +22,10 @@ func Open(module []byte, prepath []byte) *Cache {
 	}
 }
 
+// func (cache *Cache) (info *rsync.FileInfo) error {
+
+// }
+
 //func (cache *Cache) Put(info *rsync.FileInfo) error {
 //	key := []byte(cache.prepath + info.Path)
 //	value, err := proto.Marshal(&FInfo{
@@ -56,5 +60,3 @@ func Open(module []byte, prepath []byte) *Cache {
 //	}
 //	return nil
 //}
-
-

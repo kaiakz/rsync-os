@@ -303,7 +303,7 @@ func Downloader(data chan byte, filelist *FileList, os *minio.Client, module str
 			if token == 0 {
 				break
 			} else if token < 0 {
-				panic("Wrong Reference")
+				panic("Does not support block checksum")
 				// Reference
 			} else {
 				ctx := make([]byte, token)

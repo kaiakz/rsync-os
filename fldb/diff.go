@@ -9,18 +9,21 @@ import (
 )
 
 // Diff two sorted list
-// Return two lists: new files, deleted files
+// Return two lists: new files, delete files
 func (cache *Cache) Diff(list rsync.FileList) ([]int, [][]byte) {
 
 	downloadList := make([]int, 0, 4096)
 	deleteList := make([][]byte, 0, 4096)
 	// Iterate cache.module(A) & list(B), both A & B must be sorted lexicographically before
 	err := cache.db.View(func(tx *bolt.Tx) error {
-		// Assume bucket exists and has keys
-		mod, err := tx.CreateBucketIfNotExists(cache.module)
-
-		if err != nil {
-			return err
+		mod := tx.Bucket(cache.module)
+		// If bucket does not exist, create the bucket
+		if mod == nil {
+			var err error
+			mod, err = tx.CreateBucket(cache.module)
+			if err != nil {
+				return err
+			}
 		}
 
 		c := mod.Cursor()
@@ -34,7 +37,6 @@ func (cache *Cache) Diff(list rsync.FileList) ([]int, [][]byte) {
 			// If 1, B doesn't have
 			// If 0, A & B have
 			// If -1, A doesn't have
-
 			switch bytes.Compare([]byte(list[i].Path), k) {
 			case 0:
 				info := &FInfo{}
@@ -61,7 +63,7 @@ func (cache *Cache) Diff(list rsync.FileList) ([]int, [][]byte) {
 
 		// Handle remains
 		if i == list.Len() {
-			for k, _ = c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, _ = c.Next() {
+			for ; k != nil && bytes.HasPrefix(k, prefix); k, _ = c.Next() {
 				deleteList = append(deleteList, k)
 			}
 		} else {

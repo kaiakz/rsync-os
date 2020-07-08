@@ -66,14 +66,22 @@ func Socket(uri string) {
 	sort.Sort(filelist)
 
 	ppath := rsync.TrimPrepath(path)
-	//fldb.Snapshot(filelist[:], module, ppath)
+	// fldb.Snapshot(filelist[:], module, ppath)
 	cache := fldb.Open([]byte(module), []byte(ppath))
 	if cache == nil {
 
 	}
 	downloadList, deleteList := cache.Diff(filelist[:])
-	fmt.Println(downloadList)
-	fmt.Println(deleteList)
+	fmt.Println(len(downloadList))
+	for _, d := range downloadList {
+		fmt.Println(filelist[d].Path)
+	}
+	fmt.Println(len(deleteList))
+	for _, d := range deleteList {
+		fmt.Println(string(d))
+	}
+
+	// Update file list && start downloading
 
 	log.Println("File List Saved")
 
