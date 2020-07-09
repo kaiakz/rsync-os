@@ -1,7 +1,6 @@
 package fldb
 
 import (
-	"fmt"
 	"github.com/golang/protobuf/proto"
 	bolt "go.etcd.io/bbolt"
 	"log"
@@ -11,6 +10,7 @@ import (
 // Test
 func Snapshot(list rsync.FileList, module string, prepath string) {
 	db, err := bolt.Open("test.db", 0666, nil)
+	defer db.Close()
 	if err != nil {
 		return
 	}
@@ -22,7 +22,7 @@ func Snapshot(list rsync.FileList, module string, prepath string) {
 			return err
 		}
 		for _, info := range list {
-			key := []byte(prepath + info.Path)
+			key := append([]byte(prepath), info.Path[:]...)
 			value, err := proto.Marshal(&FInfo{
 				Size:  info.Size,
 				Mtime: info.Mtime,
@@ -41,25 +41,5 @@ func Snapshot(list rsync.FileList, module string, prepath string) {
 	})
 	if err != nil {
 		log.Println("Update failed", err)
-	}
-
-	err = db.View(func(tx *bolt.Tx) error {
-		// Assume bucket exists and has keys
-		b := tx.Bucket([]byte(module))
-
-		c := b.Cursor()
-
-		for k, v := c.First(); k != nil; k, v = c.Next() {
-			fmt.Println("key= ", string(k))
-			var m FInfo
-			proto.Unmarshal(v, &m)
-			fmt.Println(m.GetMtime(), m.GetSize())
-		}
-
-		return nil
-	})
-
-	if err != nil {
-
 	}
 }

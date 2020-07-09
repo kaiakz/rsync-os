@@ -16,6 +16,7 @@ import (
 	"rsync-os/fldb"
 	"rsync-os/rsync"
 	"sort"
+	"time"
 
 	"github.com/minio/minio-go/v6"
 )
@@ -36,8 +37,9 @@ func Socket(uri string) {
 
 	defer conn.Close()
 
-	c := &rsync.Client{
+	c := &rsync.SocketConn{
 		Conn: conn,
+		DemuxIn: make(chan byte, 16*1024*1024),
 	}
 
 	c.HandShake(module, path)
@@ -45,36 +47,34 @@ func Socket(uri string) {
 	// fmt.Println(readInteger(conn))
 	log.Println("HandShake OK")
 
-	data := make(chan byte, 16*1024*1024)
-
 	// Start De-Multiplexing
-	go rsync.DeMuxChan(conn, data)
+	go rsync.DeMuxChan(conn, c.DemuxIn)
 
 	filelist := make(rsync.FileList, 0, 4096)
 	// recv_file_list
 	for {
-		if rsync.GetFileList(data, &filelist) == io.EOF {
+		if rsync.GetFileList(c.DemuxIn, &filelist) == io.EOF {
 			break
 		}
 	}
 	log.Println("File List Received, total size is", len(filelist))
 
-	ioerr := rsync.GetInteger(data)
+	ioerr := rsync.GetInteger(c.DemuxIn)
 	log.Println("IOERR", ioerr)
 
 	// Sort the filelist lexicographically
 	sort.Sort(filelist)
 
 	ppath := rsync.TrimPrepath(path)
-	// fldb.Snapshot(filelist[:], module, ppath)
+	//fldb.Snapshot(filelist[:], module, ppath)
 	cache := fldb.Open([]byte(module), []byte(ppath))
 	if cache == nil {
-
+		// TODO
 	}
 	downloadList, deleteList := cache.Diff(filelist[:])
 	fmt.Println(len(downloadList))
 	for _, d := range downloadList {
-		fmt.Println(filelist[d].Path)
+		fmt.Println(string(filelist[d].Path))
 	}
 	fmt.Println(len(deleteList))
 	for _, d := range deleteList {
@@ -124,7 +124,14 @@ func Socket(uri string) {
 
 func main() {
 	//FIXME: Can't handle wrong module/path rsync://mirrors.tuna.tsinghua.edu.cn/linuxmint-packages/pool/romeo/libf/libfm/
-	Socket("rsync://mirrors.tuna.tsinghua.edu.cn/elvish")
+
+
+	startTime := time.Now().UnixNano()
+	//fldb.IterBucket("ubuntu")
+	Socket("rsync://mirrors.tuna.tsinghua.edu.cn/ubuntu")
+	//Socket("rsync://mirrors.tuna.tsinghua.edu.cn/elvish")
+	endTime := time.Now().UnixNano()
+	log.Println(float64((endTime - startTime) / 1e9))
 	// rsync://rsync.monitoring-plugins.org/plugins/
 	// rsync://rsync.mirrors.ustc.edu.cn/repo/monitoring-plugins
 	// rsync://rsync.monitoring-plugins.org/plugins/

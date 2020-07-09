@@ -12,7 +12,7 @@ import (
 	"github.com/minio/minio-go/v6"
 )
 
-type Client struct {
+type SocketConn struct {
 	Conn    net.Conn
 	DemuxIn chan byte
 	CksSeed int32
@@ -23,7 +23,7 @@ type Client struct {
 // Header len 8		AUTHREQD: 18	"@RSYNCD: EXIT" 13		RSYNC_MODULE_LIST_QUERY "\n"
 
 // See clienserver.c start_inband_exchange
-func (c *Client) HandShake(module string, path string) {
+func (c *SocketConn) HandShake(module string, path string) {
 	// send my version
 	// send("@RSYNCD: 31.0\n");
 	c.Conn.Write([]byte("@RSYNCD: 27.0\n"))
@@ -40,8 +40,6 @@ func (c *Client) HandShake(module string, path string) {
 	// send("Foo\n")
 	c.Conn.Write([]byte(module))
 	c.Conn.Write([]byte("\n"))
-	//conn.Write([]byte("epel\n"))
-	// conn.Write([]byte("\n"))
 
 	for {
 		// Wait for '@RSYNCD: OK': until \n, then add \0
@@ -61,7 +59,7 @@ func (c *Client) HandShake(module string, path string) {
 	c.SendEmptyExclusion()
 }
 
-func (c *Client) SendArgs(module string, path string) {
+func (c *SocketConn) SendArgs(module string, path string) {
 	// send parameters list
 	//conn.Write([]byte("--server\n--sender\n-g\n-l\n-o\n-p\n-D\n-r\n-t\n.\nepel/7/SRPMS\n\n"))
 	//conn.Write([]byte("--server\n--sender\n-l\n-p\n-r\n-t\n.\nepel/7/SRPMS\n\n"))	// without gid, uid, mdev
@@ -73,7 +71,7 @@ func (c *Client) SendArgs(module string, path string) {
 	c.Conn.Write(args.Bytes())
 }
 
-func (c *Client) ListOnly(module string, path string) {
+func (c *SocketConn) ListOnly(module string, path string) {
 	c.Conn.Write([]byte("@RSYNCD: 27.0\n"))
 	versionStr, _ := ReadLine(c.Conn)
 	log.Println(versionStr)
@@ -102,13 +100,13 @@ func (c *Client) ListOnly(module string, path string) {
 	c.Conn.Write(make([]byte, 4))
 }
 
-func (c *Client) SendEmptyExclusion() {
+func (c *SocketConn) SendEmptyExclusion() {
 	// send filter_list, empty is 32-bit zero
 	c.Conn.Write([]byte("\x00\x00\x00\x00"))
 }
 
 type FileInfo struct {
-	Path  string
+	Path  []byte
 	Size  int64
 	Mtime int32
 	Mode  int32
@@ -121,7 +119,7 @@ func (I FileList) Len() int {
 }
 
 func (I FileList) Less(i, j int) bool {
-	if strings.Compare(I[i].Path, I[j].Path) == -1 {
+	if bytes.Compare(I[i].Path, I[j].Path) == -1 {
 		return true
 	}
 	return false
@@ -138,7 +136,7 @@ func GetFileList(data chan byte, filelist *FileList) error {
 
 	var partial, pathlen uint32 = 0, 0
 
-	log.Println(flags)
+	//fmt.Printf("[%d]\n", flags)
 
 	if flags == 0 {
 		return io.EOF
@@ -153,7 +151,7 @@ func GetFileList(data chan byte, filelist *FileList) error {
 	 */
 	if (0x20 & flags) != 0 {
 		partial = uint32(GetByte(data))
-		log.Println("Partical", partial)
+		//fmt.Println("Partical", partial)
 	}
 
 	/* Get the (possibly-remaining) filename length. */
@@ -163,7 +161,7 @@ func GetFileList(data chan byte, filelist *FileList) error {
 	} else {
 		pathlen = uint32(<-data)
 	}
-	log.Println("PathLen", pathlen)
+	//fmt.Println("PathLen", pathlen)
 
 	/* Allocate our full filename length. */
 	/* FIXME: maximum pathname length. */
@@ -174,17 +172,18 @@ func GetFileList(data chan byte, filelist *FileList) error {
 
 	p := make([]byte, pathlen)
 	GetBytes(data, p)
-	var path string
+	path := make([]byte, 0, pathlen)
 	/* If so, use last */
 	if (0x20 & flags) != 0 { // FLIST_NAME_SAME
 		last := (*filelist)[len(*filelist)-1]
-		path = last.Path[0:partial]
+		path = append(path, last.Path[0:partial]...)
 	}
-	path += string(p)
-	log.Println("Path ", path)
+	path = append(path, p...)
+	//path += string(p)
+	//fmt.Println("Path ", string(path))
 
 	size := GetVarint(data)
-	log.Println("Size ", size)
+	//fmt.Println("Size ", size)
 
 	/* Read the modification time. */
 	var mtime int32
@@ -194,7 +193,7 @@ func GetFileList(data chan byte, filelist *FileList) error {
 	} else {
 		mtime = (*filelist)[len(*filelist)-1].Mtime
 	}
-	log.Println("MTIME ", mtime)
+	//fmt.Println("MTIME ", mtime)
 
 	/* Read the file mode. */
 	var mode int32
@@ -204,14 +203,14 @@ func GetFileList(data chan byte, filelist *FileList) error {
 	} else {
 		mode = (*filelist)[len(*filelist)-1].Mode
 	}
-	log.Println("Mode", uint32(mode))
+	//fmt.Println("Mode", uint32(mode))
 
 	// FIXME: Sym link
 	if ((mode & 32768) != 0) && ((mode & 8192) != 0) {
-		len := uint32(GetInteger(data))
-		slink := make([]byte, len)
+		sllen := uint32(GetInteger(data))
+		slink := make([]byte, sllen)
 		GetBytes(data, slink)
-		log.Println("Symbolic Len", len, "CTX", slink)
+		//fmt.Println("Symbolic Len", len, "CTX", slink)
 	}
 
 	*filelist = append(*filelist, FileInfo{
@@ -222,6 +221,18 @@ func GetFileList(data chan byte, filelist *FileList) error {
 	})
 
 	return nil
+}
+
+func (c *SocketConn) GetFL() (FileList, error) {
+	filelist := make(FileList, 0, 4096)
+	// recv_file_list
+	for {
+		if GetFileList(c.DemuxIn, &filelist) == io.EOF {
+			break
+		}
+	}
+	log.Println("File List Received, total size is", len(filelist))
+	return filelist[:], nil
 }
 
 /* Generator */
@@ -253,35 +264,30 @@ func RequestAFile(conn net.Conn, target string, filelist *FileList) {
 	// TODO: Supports multi files
 	// For test: here we request a file
 	for i := 0; i < len(*filelist); i++ {
-		if strings.Contains((*filelist)[i].Path, target) { // 0ad-data-0.0.22-1.el7.src.rpm95533 SRPMS/Packages/z/zanata-python-client-1.5.1-1.el7.src.rpmSRPMS/Packages/0/0ad-0.0.22-1.el7.src.rpm
+		if bytes.Contains((*filelist)[i].Path, []byte(target)) {
 			idx = int32(i)
 			log.Println("Pick:", (*filelist)[i], idx)
+			// identifier
+			binary.Write(conn, binary.LittleEndian, idx)
+			// block count, block length(default is 32768?), checksum length(default is 2?), block remainder, blocks(short+long)
+			// Just let them be empty(zero)
+			empty := make([]byte, 16) // 4 + 4 + 4 + 4 bytes
+			conn.Write(empty)         // ENDIAN?
+			//conn.Write(empty)
+			//binary.Write(conn, binary.LittleEndian, int32(0))	// 32768
+			//binary.Write(conn, binary.LittleEndian, int32(0))	// 2
+			//conn.Write(empty)
+			// Empty checksum
 			break
 		}
 	}
-
-	// identifier
-	binary.Write(conn, binary.LittleEndian, idx)
-
-	// block count, block length(default is 32768?), checksum length(default is 2?), block remainder, blocks(short+long)
-	// Just let them be empty(zero)
-	empty := make([]byte, 16) // 4 + 4 + 4 + 4 bytes
-	conn.Write(empty)         // ENDIAN?
-
-	//conn.Write(empty)
-	//binary.Write(conn, binary.LittleEndian, int32(0))	// 32768
-	//binary.Write(conn, binary.LittleEndian, int32(0))	// 2
-	//conn.Write(empty)
-
-	// Empty checksum
-
 	// Finish
 	binary.Write(conn, binary.LittleEndian, int32(-1))
 }
 
 func Downloader(data chan byte, filelist *FileList, os *minio.Client, module string, prepath string) {
 
-	ppath := TrimPrepath(prepath)
+	ppath := []byte(TrimPrepath(prepath))
 
 	for {
 		index := GetInteger(data)
@@ -314,7 +320,8 @@ func Downloader(data chan byte, filelist *FileList, os *minio.Client, module str
 		}
 
 		// Put file to object storage
-		n, err := os.PutObject(module, ppath+path, buf, int64(buf.Len()), minio.PutObjectOptions{})
+		objectName := string(append(ppath[:], path[:]...))	// prefix + path
+		n, err := os.PutObject(module, objectName, buf, int64(buf.Len()), minio.PutObjectOptions{})
 		if err != nil {
 			log.Fatalln(err)
 		}

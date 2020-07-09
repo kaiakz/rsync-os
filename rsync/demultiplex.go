@@ -251,7 +251,7 @@ func GetFile(data chan byte, index int32, filelist *FileList) {
 	log.Println("Buff Total size:", buf.Len())
 	//lookup(int64(buf.Len()), filelist)
 	//ioutil.WriteFile("temp.txt", buf.Bytes(), 0644)
-	WriteOS(buf, path)
+	WriteOS(buf, string(path))
 
 	lmd4 := md4.New()
 	lmd4.Write(buf.Bytes())

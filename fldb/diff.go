@@ -37,7 +37,7 @@ func (cache *Cache) Diff(list rsync.FileList) ([]int, [][]byte) {
 			// If 1, B doesn't have
 			// If 0, A & B have
 			// If -1, A doesn't have
-			switch bytes.Compare([]byte(list[i].Path), k) {
+			switch bytes.Compare(list[i].Path, k) {
 			case 0:
 				info := &FInfo{}
 				err := proto.Unmarshal(v, info)
