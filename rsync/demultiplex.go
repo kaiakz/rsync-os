@@ -49,11 +49,12 @@ func DeMuxChan(conn net.Conn, data chan byte) {
 
 		log.Println("*****TAG", tag, "SIZE", size, "*****")
 
-		if tag == 7 { // MUL_BASE + MSG_DATA
+		if tag == (MSG_BASE + MSG_DATA) { // MUL_BASE + MSG_DATA
 			body := make([]byte, size)
 
 			_, err := ReadExact(conn, body)
 
+			// FIXME: Never return EOF
 			if err == io.EOF { // Finish
 				panic("EOF")
 			}
