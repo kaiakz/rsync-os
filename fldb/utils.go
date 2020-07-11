@@ -6,7 +6,8 @@ import (
 	bolt "go.etcd.io/bbolt"
 )
 
-func IterBucket(module string) {
+// FIXME
+func IterDBBucket(module string) {
 	db, err := bolt.Open("test.db", 0666, nil)
 	defer db.Close()
 	if err != nil {

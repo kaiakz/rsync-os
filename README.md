@@ -17,6 +17,7 @@
 - [x] Fetch the file list
 - [x] Request & download files
 
+## Detail
 #### Why we don't need block checksum?
 Rsync requires random reading and writing of files to do the block exchange. But object storage does not support that.
 rsync-os simplifies the rsync algorithm to avoid random reading and writing. When a file needs to be updated, we just download the entire file from the server and then replace it.

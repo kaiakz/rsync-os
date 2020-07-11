@@ -10,6 +10,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/minio/minio-go/v6"
 	"io"
 	"log"
 	"net"
@@ -17,8 +18,6 @@ import (
 	"rsync-os/rsync"
 	"sort"
 	"time"
-
-	"github.com/minio/minio-go/v6"
 )
 
 func Socket(uri string) {
@@ -124,15 +123,12 @@ func Socket(uri string) {
 
 func main() {
 	//FIXME: Can't handle wrong module/path rsync://mirrors.tuna.tsinghua.edu.cn/linuxmint-packages/pool/romeo/libf/libfm/
-
-
-	startTime := time.Now().UnixNano()
-	//fldb.IterBucket("ubuntu")
-	Socket("rsync://mirrors.tuna.tsinghua.edu.cn/ubuntu")
-	//Socket("rsync://mirrors.tuna.tsinghua.edu.cn/elvish")
-	endTime := time.Now().UnixNano()
-	log.Println(float64((endTime - startTime) / 1e9))
 	// rsync://rsync.monitoring-plugins.org/plugins/
 	// rsync://rsync.mirrors.ustc.edu.cn/repo/monitoring-plugins
 	// rsync://rsync.monitoring-plugins.org/plugins/
+	// rsync://mirrors.tuna.tsinghua.edu.cn/ubuntu
+	// rsync://mirrors.tuna.tsinghua.edu.cn/elvish
+	startTime := time.Now()
+	Socket("rsync://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports")
+	log.Println("Duration:", time.Since(startTime))
 }

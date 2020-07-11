@@ -25,8 +25,7 @@ type SocketConn struct {
 // See clienserver.c start_inband_exchange
 func (c *SocketConn) HandShake(module string, path string) {
 	// send my version
-	// send("@RSYNCD: 31.0\n");
-	c.Conn.Write([]byte("@RSYNCD: 27.0\n"))
+	c.Conn.Write([]byte(RSYNC_VERSION))
 
 	// receive server's protocol version and seed
 	versionStr, _ := ReadLine(c.Conn)
@@ -37,7 +36,6 @@ func (c *SocketConn) HandShake(module string, path string) {
 	log.Println(versionStr)
 
 	// send mod name
-	// send("Foo\n")
 	c.Conn.Write([]byte(module))
 	c.Conn.Write([]byte("\n"))
 
@@ -61,10 +59,9 @@ func (c *SocketConn) HandShake(module string, path string) {
 
 func (c *SocketConn) SendArgs(module string, path string) {
 	// send parameters list
-	//conn.Write([]byte("--server\n--sender\n-g\n-l\n-o\n-p\n-D\n-r\n-t\n.\nepel/7/SRPMS\n\n"))
-	//conn.Write([]byte("--server\n--sender\n-l\n-p\n-r\n-t\n.\nepel/7/SRPMS\n\n"))	// without gid, uid, mdev
+	// Sample "--server\n--sender\n-g\n-l\n-o\n-p\n-D\n-r\n-t\n.\nepel/7/SRPMS\n\n"
 	args := new(bytes.Buffer)
-	args.Write([]byte("--server\n--sender\n-l\n-p\n-r\n-t\n.\n"))
+	args.Write([]byte(SAMPLE_ARGS))
 	args.Write([]byte(module))
 	args.Write([]byte(path))
 	args.Write([]byte("\n\n"))
@@ -138,6 +135,7 @@ func GetFileList(data chan byte, filelist *FileList) error {
 
 	//fmt.Printf("[%d]\n", flags)
 
+	// TODO: refactor
 	if flags == 0 {
 		return io.EOF
 	}
@@ -149,13 +147,13 @@ func GetFileList(data chan byte, filelist *FileList) error {
 	 * If we have FLIST_NAME_LONG, then the string length is greater
 	 * than byte-size.
 	 */
-	if (0x20 & flags) != 0 {
+	if (flags & FLIST_NAME_SAME) != 0 {
 		partial = uint32(GetByte(data))
 		//fmt.Println("Partical", partial)
 	}
 
 	/* Get the (possibly-remaining) filename length. */
-	if (0x40 & flags) != 0 {
+	if (flags & FLIST_NAME_LONG) != 0 {
 		pathlen = uint32(GetInteger(data)) // can't use for rsync 31
 
 	} else {
@@ -168,18 +166,15 @@ func GetFileList(data chan byte, filelist *FileList) error {
 	// TODO: if pathlen + partical == 0
 	// malloc len error?
 
-	// last := (*filelist)[len(*filelist) - 1]	// FIXME
-
 	p := make([]byte, pathlen)
 	GetBytes(data, p)
 	path := make([]byte, 0, pathlen)
 	/* If so, use last */
-	if (0x20 & flags) != 0 { // FLIST_NAME_SAME
+	if (flags & FLIST_NAME_SAME) != 0 { // FLIST_NAME_SAME
 		last := (*filelist)[len(*filelist)-1]
 		path = append(path, last.Path[0:partial]...)
 	}
 	path = append(path, p...)
-	//path += string(p)
 	//fmt.Println("Path ", string(path))
 
 	size := GetVarint(data)
@@ -187,7 +182,7 @@ func GetFileList(data chan byte, filelist *FileList) error {
 
 	/* Read the modification time. */
 	var mtime int32
-	if (flags & 0x80) == 0 {
+	if (flags & FLIST_TIME_SAME) == 0 {
 		mtime = GetInteger(data)
 
 	} else {
@@ -197,7 +192,7 @@ func GetFileList(data chan byte, filelist *FileList) error {
 
 	/* Read the file mode. */
 	var mode int32
-	if (flags & 0x02) == 0 {
+	if (flags & FLIST_MODE_SAME) == 0 {
 		mode = GetInteger(data)
 
 	} else {
@@ -210,7 +205,7 @@ func GetFileList(data chan byte, filelist *FileList) error {
 		sllen := uint32(GetInteger(data))
 		slink := make([]byte, sllen)
 		GetBytes(data, slink)
-		//fmt.Println("Symbolic Len", len, "CTX", slink)
+		//fmt.Println("Symbolic Len:", len, "Content:", slink)
 	}
 
 	*filelist = append(*filelist, FileInfo{
@@ -261,7 +256,6 @@ func RequestAFile(conn net.Conn, target string, filelist *FileList) {
 	// Those files are `basis files`
 	var idx int32
 
-	// TODO: Supports multi files
 	// For test: here we request a file
 	for i := 0; i < len(*filelist); i++ {
 		if bytes.Contains((*filelist)[i].Path, []byte(target)) {
@@ -273,10 +267,6 @@ func RequestAFile(conn net.Conn, target string, filelist *FileList) {
 			// Just let them be empty(zero)
 			empty := make([]byte, 16) // 4 + 4 + 4 + 4 bytes
 			conn.Write(empty)         // ENDIAN?
-			//conn.Write(empty)
-			//binary.Write(conn, binary.LittleEndian, int32(0))	// 32768
-			//binary.Write(conn, binary.LittleEndian, int32(0))	// 2
-			//conn.Write(empty)
 			// Empty checksum
 			break
 		}
