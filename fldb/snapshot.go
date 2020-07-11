@@ -5,10 +5,12 @@ import (
 	bolt "go.etcd.io/bbolt"
 	"log"
 	"rsync-os/rsync"
+	"time"
 )
 
 // Test
 func Snapshot(list rsync.FileList, module string, prepath string) {
+	startTime := time.Now()
 	db, err := bolt.Open("test.db", 0666, nil)
 	defer db.Close()
 	if err != nil {
@@ -16,10 +18,14 @@ func Snapshot(list rsync.FileList, module string, prepath string) {
 	}
 
 	err = db.Update(func(tx *bolt.Tx) error {
-		bucket, err := tx.CreateBucketIfNotExists([]byte(module))
-		if err != nil {
-			log.Panicln("create module as bucket failed", err)
-			return err
+		bucket := tx.Bucket([]byte(module))
+		// If bucket does not exist, create the bucket
+		if bucket == nil {
+			var err error
+			bucket, err = tx.CreateBucket([]byte(module))
+			if err != nil {
+				return err
+			}
 		}
 		for _, info := range list {
 			key := append([]byte(prepath), info.Path[:]...)
@@ -42,4 +48,5 @@ func Snapshot(list rsync.FileList, module string, prepath string) {
 	if err != nil {
 		log.Println("Update failed", err)
 	}
+	log.Println("Save All Duration", time.Since(startTime))
 }

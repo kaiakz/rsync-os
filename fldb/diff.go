@@ -2,7 +2,9 @@ package fldb
 
 import (
 	"bytes"
+	"log"
 	"rsync-os/rsync"
+	"time"
 
 	bolt "go.etcd.io/bbolt"
 	"google.golang.org/protobuf/proto"
@@ -11,6 +13,7 @@ import (
 // Diff two sorted list
 // Return two lists: new files, delete files
 func (cache *Cache) Diff(list rsync.FileList) ([]int, [][]byte) {
+	startTime := time.Now()
 
 	downloadList := make([]int, 0, 4096)
 	deleteList := make([][]byte, 0, 4096)
@@ -78,5 +81,6 @@ func (cache *Cache) Diff(list rsync.FileList) ([]int, [][]byte) {
 
 	}
 
+	log.Println("Diff Duration", time.Since(startTime))
 	return downloadList[:], deleteList[:]
 }
