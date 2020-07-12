@@ -27,7 +27,10 @@ func Socket(uri string) {
 	fmt.Println(module, path)
 
 	conn, err := net.Dial("tcp", addr)
-	// tuna: mirrors.tuna.tsinghua.edu.cn 101.6.8.193:873
+	//rAddr, err := net.ResolveTCPAddr("tcp", addr)
+	//tconn, err := net.DialTCP("tcp", nil, rAddr)
+	//tconn.SetReadBuffer(4096)
+	//tconn.SetWriteBuffer(4096)
 
 	if err != nil {
 		// TODO
@@ -49,7 +52,7 @@ func Socket(uri string) {
 	// Start De-Multiplexing
 	go rsync.DeMuxChan(conn, c.DemuxIn)
 
-	filelist := make(rsync.FileList, 0, 4096)
+	filelist := make(rsync.FileList, 0, 1024 * 1024)
 	// recv_file_list
 	for {
 		if rsync.GetFileList(c.DemuxIn, &filelist) == io.EOF {
@@ -83,6 +86,8 @@ func Socket(uri string) {
 	// Update file list && start downloading
 
 	log.Println("File List Saved")
+
+	c.FinalPhase()
 
 	return
 

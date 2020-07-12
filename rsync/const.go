@@ -2,12 +2,23 @@ package rsync
 
 const (
 	RSYNC_VERSION = "@RSYNCD: 27.3\n"
+	RSYNCD_OK = "@RSYNCD: OK"
 
-	SAMPLE_ARGS = "--server\n--sender\n-l\n-p\n-r\n-t\n.\n"
+	INDEX_DONE = int32(-1)
+	EMPTY_EXCLUSION = int32(0)
 	END1 = '\n'
 	END2 = '\x00'
 
-	// Multiplex
+	// ARGUMENTS
+	ARG_SERVER = "--server"
+	ARG_SENDER = "--sender"
+	ARG_SYMLINK = "-l"
+	ARG_RECURSIVE = "-r"
+	ARG_PERMS = "-p"
+	SAMPLE_ARGS = "--server\n--sender\n-l\n-p\n-r\n-t\n.\n"
+	SAMPLE_LIST_ARGS = "--server\n--sender\n--list-only\n-l\n-p\n-r\n-t\n.\n"
+
+	// Multiplex(1 byte)
 	MSG_BASE = 7
 	MSG_DATA = 0
 	MSG_ERROR_XFER = 1
@@ -20,7 +31,7 @@ const (
 	MSG_DELETED = 101
 	MSG_NO_SEND = 102
 
-	// FILE LIST
+	// FILE LIST(1 byte)
 	FLIST_END = 0x00
 	FLIST_TOP_LEVEL	= 0x01 /* needed for remote --delete */
 	FLIST_MODE_SAME = 0x02 /* mode is repeat */

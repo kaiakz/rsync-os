@@ -76,54 +76,32 @@ func (c *SocketConn) ListOnly(module string, path string) {
 	c.Conn.Write([]byte(module))
 	c.Conn.Write([]byte("\n"))
 	for {
-		// Wait for '@RSYNCD: OK': until \n, then add \0
 		res, _ := ReadLine(c.Conn)
 		log.Print(res)
 		if strings.Contains(res, "@RSYNCD: OK") {
 			break
 		}
 	}
+
 	args := new(bytes.Buffer)
-	args.Write([]byte("--server\n--sender\n-l\n-p\n-r\n-t\n.\n"))
+	args.Write([]byte(SAMPLE_LIST_ARGS))
 	args.Write([]byte(module))
 	args.Write([]byte(path))
 	args.Write([]byte("\n\n"))
-
 	c.Conn.Write(args.Bytes())
 
 	seed := ReadInteger(c.Conn)
 	log.Println("SEED: ", seed)
 
 	c.Conn.Write(make([]byte, 4))
+
+	c.FinalPhase()
+
 }
 
 func (c *SocketConn) SendEmptyExclusion() {
 	// send filter_list, empty is 32-bit zero
 	c.Conn.Write([]byte("\x00\x00\x00\x00"))
-}
-
-type FileInfo struct {
-	Path  []byte
-	Size  int64
-	Mtime int32
-	Mode  int32
-}
-
-type FileList []FileInfo
-
-func (I FileList) Len() int {
-	return len(I)
-}
-
-func (I FileList) Less(i, j int) bool {
-	if bytes.Compare(I[i].Path, I[j].Path) == -1 {
-		return true
-	}
-	return false
-}
-
-func (I FileList) Swap(i, j int) {
-	I[i], I[j] = I[j], I[i]
 }
 
 // file list: ends with '\0'
@@ -334,10 +312,10 @@ func exchangeBlock() {
 	// Download the data blocks, and write them into a file
 }
 
-func FinalPhase(conn net.Conn, data chan byte) {
-
-	binary.Write(conn, binary.LittleEndian, int32(-1))
-	ioerror := GetInteger(data)
+func (c *SocketConn) FinalPhase() {
+	ioerror := GetInteger(c.DemuxIn)
 	fmt.Println(ioerror)
 
+	binary.Write(c.Conn, binary.LittleEndian, INDEX_DONE)
+	binary.Write(c.Conn, binary.LittleEndian, INDEX_DONE)
 }
