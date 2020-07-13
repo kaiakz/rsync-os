@@ -22,6 +22,10 @@ func Open(module []byte, prepath []byte) *Cache {
 	}
 }
 
+func (c *Cache)Close() {
+	c.db.Close()
+}
+
 // func (cache *Cache) (info *rsync.FileInfo) error {
 
 // }

@@ -87,8 +87,10 @@ func Socket(uri string) {
 
 	log.Println("File List Saved")
 
-	c.FinalPhase()
+	//c.FinalPhase()
 
+	// FIXME: Close fldb & network
+	cache.Close()
 	return
 
 	// Init the object storage
