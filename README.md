@@ -1,5 +1,5 @@
 # RSYNC-OS
-## A rsync-compatible tool for object storage.
+## A rsync-compatible tool for object storage
 
 ![client](https://raw.githubusercontent.com/kaiakz/rsync-os/master/docs/client.jpg)
 
@@ -16,10 +16,18 @@
 - [x] Send argument list
 - [x] Fetch the file list
 - [x] Request & download files
+- [x] File List Caching
+- [ ] CLI
 
-## Detail
+## Detailed Information
+#### What's the difference between rsync and rsync-os
+rsync-os is express edition of rsync. It uses a subset of rsync wire protocol(without block checksum)
+
+#### rsync-os and rclone are completely different
+rclone does not support rsync wire protocol although it is called "rsync for object storage". With rclone you can't transfer files between rsync and object storage with rclone.
+
 #### Why we don't need block checksum?
-Rsync requires random reading and writing of files to do the block exchange. But object storage does not support that.
+rsync requires random reading and writing of files to do the block exchange. But object storage does not support that.
 rsync-os simplifies the rsync algorithm to avoid random reading and writing. When a file needs to be updated, we just download the entire file from the server and then replace it.
 
 #### HandShake
