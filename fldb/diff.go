@@ -12,7 +12,7 @@ import (
 
 // Diff two sorted list
 // Return two lists: new files, delete files
-func (cache *Cache) Diff(list rsync.FileList) ([]int, [][]byte) {
+func (cache *BoltDB) Diff(list rsync.FileList) ([]int, [][]byte) {
 	startTime := time.Now()
 
 	downloadList := make([]int, 0, 4096)
