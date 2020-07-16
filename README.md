@@ -5,8 +5,8 @@
 
 ## Usage
 ### minio
-1. install & run minio, you need to configure your setting of minio in the main.go.
-2. go run main.go
+1. install & run minio, you need to configure the `config.yaml`.
+2. `go build && go run rsync-os`
 
 ## Roadmap
 ### Client
@@ -21,7 +21,7 @@
 
 ## Detailed Information
 #### What's the difference between rsync and rsync-os
-rsync-os is express edition of rsync. It uses a subset of rsync wire protocol(without block checksum)
+rsync-os is the express edition of rsync, with object storage support. It uses a subset of rsync wire protocol(without block checksum).
 
 #### rsync-os and rclone are completely different
 rclone does not support rsync wire protocol although it is called "rsync for object storage". With rclone you can't transfer files between rsync and object storage with rclone.

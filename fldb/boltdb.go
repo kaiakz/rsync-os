@@ -10,10 +10,10 @@ type BoltDB struct {
 	prepath []byte
 }
 
-func Open(module []byte, prepath []byte) *BoltDB {
-	db, err := bolt.Open("test.db", 0666, nil)
+func Open(path string, module []byte, prepath []byte) *BoltDB {
+	db, err := bolt.Open(path, 0666, nil)
 	if err != nil {
-		return nil
+		panic("Can't init fldb: boltdb")
 	}
 	return &BoltDB{
 		db:      db,

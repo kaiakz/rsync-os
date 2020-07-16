@@ -11,6 +11,7 @@ package main
 import (
 	"fmt"
 	"github.com/minio/minio-go/v6"
+	"github.com/spf13/viper"
 	"io"
 	"log"
 	"net"
@@ -69,7 +70,8 @@ func Socket(uri string) {
 
 	ppath := rsync.TrimPrepath(path)
 	//fldb.Snapshot(filelist[:], module, ppath)
-	cache := fldb.Open([]byte(module), []byte(ppath))
+	dbconf := viper.GetStringMapString("boltdb")
+	cache := fldb.Open(dbconf["path"], []byte(module), []byte(ppath))
 	if cache == nil {
 		// TODO
 	}
@@ -95,13 +97,11 @@ func Socket(uri string) {
 
 	// Init the object storage
 	// For test
-	endpoint := "127.0.0.1:9000"
-	accessKeyID := "minioadmin"
-	secretAccessKey := "minioadmin"
+	minioConf := viper.GetStringMapString("minio")
 
-	minioClient, err := minio.New(endpoint, accessKeyID, secretAccessKey, false)
+	minioClient, err := minio.New(minioConf["endpoint"], minioConf["accesskeyid"], minioConf["secretaccesskey"], false)
 	if err != nil {
-		panic("Failed")
+		panic("minio Client failed to init")
 	}
 
 	// Create a bucket for the module
@@ -135,6 +135,7 @@ func main() {
 	// rsync://rsync.monitoring-plugins.org/plugins/
 	// rsync://mirrors.tuna.tsinghua.edu.cn/ubuntu
 	// rsync://mirrors.tuna.tsinghua.edu.cn/elvish
+	LoadYAMLConfig()
 	startTime := time.Now()
 	Socket("rsync://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports")
 	log.Println("Duration:", time.Since(startTime))
