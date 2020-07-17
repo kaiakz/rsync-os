@@ -1,6 +1,0 @@
-boltdb:
-  path: test.db
-minio:
-  accesskeyid: minioadmin
-  endpoint: 127.0.0.1:9000
-  secretaccesskey: minioadmin

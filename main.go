@@ -70,7 +70,7 @@ func Socket(uri string) {
 
 	ppath := rsync.TrimPrepath(path)
 	//fldb.Snapshot(filelist[:], module, ppath)
-	dbconf := viper.GetStringMapString("boltdb")
+	dbconf := viper.GetStringMapString("minio.boltdb")
 	cache := fldb.Open(dbconf["path"], []byte(module), []byte(ppath))
 	if cache == nil {
 		// TODO
@@ -99,7 +99,7 @@ func Socket(uri string) {
 	// For test
 	minioConf := viper.GetStringMapString("minio")
 
-	minioClient, err := minio.New(minioConf["endpoint"], minioConf["accesskeyid"], minioConf["secretaccesskey"], false)
+	minioClient, err := minio.New(minioConf["endpoint"], minioConf["keyaccess"], minioConf["keysecret"], false)
 	if err != nil {
 		panic("minio Client failed to init")
 	}
@@ -135,8 +135,8 @@ func main() {
 	// rsync://rsync.monitoring-plugins.org/plugins/
 	// rsync://mirrors.tuna.tsinghua.edu.cn/ubuntu
 	// rsync://mirrors.tuna.tsinghua.edu.cn/elvish
-	LoadYAMLConfig()
 	startTime := time.Now()
+	loadConfigIfExists()
 	Socket("rsync://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports")
 	log.Println("Duration:", time.Since(startTime))
 }
