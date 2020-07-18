@@ -1,12 +1,15 @@
 package rsync
 
-import "bytes"
+import (
+	"bytes"
+	"os"
+)
 
 type FileInfo struct {
 	Path  []byte
 	Size  int64
 	Mtime int32
-	Mode  int32
+	Mode  os.FileMode
 }
 
 type FileList []FileInfo

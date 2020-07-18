@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
+	"os"
 
 	"github.com/minio/minio-go/v6"
 	"golang.org/x/crypto/md4"
@@ -95,6 +96,12 @@ func GetInteger(data chan byte) int32 {
 	val := make([]byte, 4)
 	GetBytes(data, val)
 	return int32(binary.LittleEndian.Uint32(val))
+}
+
+func GetFileMode(data chan byte) os.FileMode {
+	val := make([]byte, 4)
+	GetBytes(data, val)
+	return os.FileMode(binary.LittleEndian.Uint32(val))
 }
 
 func GetLong(data chan byte) int64 {

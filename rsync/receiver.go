@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"os"
 	"strings"
 
 	"github.com/minio/minio-go/v6"
@@ -169,9 +170,9 @@ func GetFileList(data chan byte, filelist *FileList) error {
 	//fmt.Println("MTIME ", mtime)
 
 	/* Read the file mode. */
-	var mode int32
+	var mode os.FileMode
 	if (flags & FLIST_MODE_SAME) == 0 {
-		mode = GetInteger(data)
+		mode = GetFileMode(data)
 
 	} else {
 		mode = (*filelist)[len(*filelist)-1].Mode
