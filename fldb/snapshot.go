@@ -32,7 +32,7 @@ func Snapshot(list rsync.FileList, module string, prepath string) {
 			value, err := proto.Marshal(&FInfo{
 				Size:  info.Size,
 				Mtime: info.Mtime,
-				Mode:  info.Mode,
+				Mode:  int32(info.Mode),	// FIXME: convert uint32 to int32
 			})
 			if err != nil {
 				log.Println("Marshal failed", err)

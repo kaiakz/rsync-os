@@ -1,7 +1,8 @@
 package rsync
 
 import (
-	"bytes"
+	"github.com/pkg/errors"
+	"log"
 	"strconv"
 	"strings"
 )
@@ -9,13 +10,13 @@ import (
 func SplitURIS(uri string) (string, int, string, string, error) {
 
 	var host, module, path string
-	var first = []byte(uri)
-	var second []byte
+	first := uri
+	var second string
 
 	if strings.HasPrefix(uri, "rsync://") {
 		/* rsync://host[:port]/module[/path] */
 		first = first[8:]
-		i := bytes.IndexByte(first, '/')
+		i := strings.IndexByte(first, '/')
 		if i == -1 {
 			// No module name
 			panic("No module name")
@@ -31,7 +32,7 @@ func SplitURIS(uri string) (string, int, string, string, error) {
 	port := 873 // Default port: 873
 
 	// Parse port
-	i := bytes.IndexByte(first, ':')
+	i := strings.IndexByte(first, ':')
 	if i != -1 {
 		var err error
 		port, err = strconv.Atoi(string(first[i+1:]))
@@ -41,15 +42,15 @@ func SplitURIS(uri string) (string, int, string, string, error) {
 		}
 		first = first[:i]
 	}
-	host = string(first)
+	host = first
 
 	// Parse path
-	i = bytes.IndexByte(second, '/')
+	i = strings.IndexByte(second, '/')
 	if i != -1 {
-		path = string(second[i:])
+		path = second[i:]
 		second = second[:i]
 	}
-	module = string(second)
+	module = second
 
 	return host, port, module, path, nil
 
@@ -59,39 +60,39 @@ func SplitURIS(uri string) (string, int, string, string, error) {
 func SplitURI(uri string) (string, string, string, error) {
 
 	var address, module, path string
-	var first = []byte(uri)
-	var second []byte
+	var first = uri
+	var second string
 
 	if strings.HasPrefix(uri, "rsync://") {
 		/* rsync://host[:port]/module[/path] */
 		first = first[8:]
-		i := bytes.IndexByte(first, '/')
+		i := strings.IndexByte(first, '/')
 		if i == -1 {
 			// No module name
-			panic("No module name")
+			return "", "", "", errors.New("No module name")
 		}
 		second = first[i+1:] //ignore '/'
 		first = first[:i]
 	} else {
 		// Only for remote
 		/* host::module[/path] */
-		panic("No implement yet")
+		log.Fatalln("No implement yet")
 	}
 
-	address = string(first)
+	address = first
 	// Parse port
-	i := bytes.IndexByte(first, ':')
+	i := strings.IndexByte(first, ':')
 	if i == -1 {
 		address += ":873" // Default port: 873
 	}
 
 	// Parse path
-	i = bytes.IndexByte(second, '/')
+	i = strings.IndexByte(second, '/')
 	if i != -1 {
-		path = string(second[i:])
+		path = second[i:]
 		second = second[:i]
 	}
-	module = string(second)
+	module = second
 
 	return address, module, path, nil
 
