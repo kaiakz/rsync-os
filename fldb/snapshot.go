@@ -48,5 +48,5 @@ func Snapshot(list rsync.FileList, module string, prepath string) {
 	if err != nil {
 		log.Println("Update failed", err)
 	}
-	log.Println("Save All Duration", time.Since(startTime))
+	log.Println("Saved Duration", time.Since(startTime))
 }

@@ -9,6 +9,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"github.com/minio/minio-go/v6"
 	"github.com/spf13/viper"
@@ -23,7 +24,12 @@ import (
 
 func Socket(uri string) {
 
-	addr, module, path, _ := rsync.SplitURI(uri)
+	addr, module, path, err := rsync.SplitURI(uri)
+
+	if err != nil {
+		log.Println("Invaild URI")
+		return
+	}
 
 	fmt.Println(module, path)
 
@@ -35,7 +41,7 @@ func Socket(uri string) {
 
 	if err != nil {
 		// TODO
-		panic("Network Error")
+		log.Fatalln("Network Error")
 	}
 
 	defer conn.Close()
@@ -130,13 +136,14 @@ func Socket(uri string) {
 
 func main() {
 	//FIXME: Can't handle wrong module/path rsync://mirrors.tuna.tsinghua.edu.cn/linuxmint-packages/pool/romeo/libf/libfm/
-	// rsync://rsync.monitoring-plugins.org/plugins/
-	// rsync://rsync.mirrors.ustc.edu.cn/repo/monitoring-plugins
-	// rsync://rsync.monitoring-plugins.org/plugins/
-	// rsync://mirrors.tuna.tsinghua.edu.cn/ubuntu
-	// rsync://mirrors.tuna.tsinghua.edu.cn/elvish
-	startTime := time.Now()
 	loadConfigIfExists()
-	Socket("rsync://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports")
+	flag.Parse()
+	args := flag.Args()
+	if len(args) < 2 {
+		fmt.Println("Usage: rsync-os [OPTION]... rsync://[USER@]HOST[:PORT]/SRC")
+		return
+	}
+	startTime := time.Now()
+	Socket(args[0])
 	log.Println("Duration:", time.Since(startTime))
 }
