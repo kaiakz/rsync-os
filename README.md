@@ -6,7 +6,8 @@
 ## Usage
 ### minio
 1. install & run minio, you need to configure the `config.yaml`.
-2. `go build && go run rsync-os`
+2. `go build`
+3. `./rsync-os rsync://[USER@]HOST[:PORT]/SRC minio`, for example, `./rsync-os rsync://mirrors.tuna.tsinghua.edu.cn/ubuntu minio`
 
 ## Roadmap
 ### Client
