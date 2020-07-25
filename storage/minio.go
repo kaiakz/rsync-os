@@ -1,12 +1,23 @@
 package storage
 
 import (
+	"bytes"
 	"github.com/minio/minio-go/v6"
 	"io"
 	"log"
+	"os"
+	"path"
 	"rsync-os/rsync"
 	"strconv"
+	"strings"
 )
+
+
+/*
+rsync-os will add addition information for each file that was uploaded to minio
+rsync-os stores the information of a folder in the metadata of an empty file called "..."
+rsync-os also uses a strange file to represent a soft link
+*/
 
 // A bucketName
 type Minio struct {
@@ -22,6 +33,19 @@ func New(bucket string, endpoint string, accessKeyID string, secretAccessKey str
 	minioClient, err := minio.New(endpoint, accessKeyID, secretAccessKey, false)
 	if err != nil {
 		panic("Failed to init a minio client")
+	}
+	// Create a bucket for the module
+	err = minioClient.MakeBucket(bucket, "us-east-1")
+	if err != nil {
+		// Check to see if we already own this bucket (which happens if you run this twice)
+		exists, errBucketExists := minioClient.BucketExists(bucket)
+		if errBucketExists == nil && exists {
+			log.Printf("We already own %s\n", bucket)
+		} else {
+			log.Fatalln(err)
+		}
+	} else {
+		log.Printf("Successfully created %s\n", bucket)
 	}
 	return &Minio{
 		client:     minioClient,
@@ -39,20 +63,36 @@ func (m *Minio) GetBucket() string {
 
 
 // Upload a file in goroutine
-func Uploader() {
+func (m *Minio) Uploader() {
 
 }
 
-func (m *Minio) Write(fileName string, reader io.Reader, fileSize int64, metadata FileMetadata) (n int64, err error) {
+// object can be a regualar file, folder or symlink
+func (m *Minio) Write(objectName string, reader io.Reader, objectSize int64, metadata FileMetadata) (n int64, err error) {
 	data := make(map[string] string)
 	data["mtime"] = strconv.Itoa(int(metadata.Mtime))
 	data["mode"] = strconv.Itoa(int(metadata.Mode))
-	return m.client.PutObject(m.bucketName, fileName, reader, fileSize, minio.PutObjectOptions{UserMetadata: data})
+
+	// Folder
+	if metadata.Mode.IsDir() {
+		sign := new(bytes.Buffer)
+		signName := objectName + "/..."
+		// FIXME: How to handle a file named "..." as well ?
+		return m.client.PutObject(m.bucketName, signName, reader, int64(sign.Len()), minio.PutObjectOptions{UserMetadata: data})
+	}
+	// TODO: symlink
+	if metadata.Mode & os.ModeSymlink != 0 {
+		sign := new(bytes.Buffer)
+		// Additional data of symbol link
+		return m.client.PutObject(m.bucketName, objectName, reader, int64(sign.Len()), minio.PutObjectOptions{UserMetadata: data})
+	}
+
+	return m.client.PutObject(m.bucketName, objectName, reader, objectSize, minio.PutObjectOptions{UserMetadata: data})
 }
 
-func (m *Minio) Delete(fileName string) error {
+func (m *Minio) Delete(objectName string) error {
 	// TODO: How to delete a folder
-	return m.client.RemoveObject(m.bucketName, fileName)
+	return m.client.RemoveObject(m.bucketName, objectName)
 }
 
 func (m *Minio) List() rsync.FileList {
@@ -71,6 +111,13 @@ func (m *Minio) List() rsync.FileList {
 			log.Println(object.Err)
 			return nil
 		}
+
+		// FIXME: Handle folder
+		objectName := object.Key
+		if strings.Compare(path.Base(objectName), "...") == 0 {
+			objectName = path.Dir(objectName)
+		}
+
 		mtime, err := strconv.Atoi(object.UserMetadata["mtime"])
 		if err != nil {
 			panic("Can't get the mode from minio")
@@ -82,10 +129,10 @@ func (m *Minio) List() rsync.FileList {
 		}
 
 		filelist = append(filelist, rsync.FileInfo{
-			Path:  []byte(object.Key),
+			Path:  []byte(objectName),
 			Size:  object.Size,
 			Mtime: int32(mtime),
-			Mode:  int32(mode),
+			Mode:  os.FileMode(mode),
 		})
 	}
 	return filelist[:]
