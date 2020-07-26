@@ -48,6 +48,7 @@ The rsync server sends the entire file as a stream of bytes.
 ![de-multiplex](https://raw.githubusercontent.com/kaiakz/rsync-os/master/docs/demux.jpg)
 
 ### Limitations
+* Do not support block exchange. If a file was modified, just downloads the whole file.
 
 # Reference
 * https://git.samba.org/?p=rsync.git

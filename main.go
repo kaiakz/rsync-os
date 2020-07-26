@@ -11,7 +11,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/minio/minio-go/v6"
 	"github.com/spf13/viper"
 	"io"
 	"log"
@@ -22,7 +21,7 @@ import (
 	"time"
 )
 
-func Socket(uri string) {
+func Socket(uri string, dest string) {
 
 	addr, module, path, err := rsync.SplitURI(uri)
 
@@ -31,7 +30,7 @@ func Socket(uri string) {
 		return
 	}
 
-	fmt.Println(module, path)
+	log.Println(module, path)
 
 	conn, err := net.Dial("tcp", addr)
 	//rAddr, err := net.ResolveTCPAddr("tcp", addr)
@@ -76,10 +75,14 @@ func Socket(uri string) {
 
 	ppath := rsync.TrimPrepath(path)
 	//fldb.Snapshot(filelist[:], module, ppath)
-	dbconf := viper.GetStringMapString("minio.boltdb")
+	if viper.GetStringMapString(dest) == nil {
+		log.Fatalln("Lack of ", dest)
+	}
+	dbconf := viper.GetStringMapString(dest + ".boltdb")
 	cache := fldb.Open(dbconf["path"], []byte(module), []byte(ppath))
 	if cache == nil {
 		// TODO
+		log.Fatalln("Failed to init cache")
 	}
 	downloadList, deleteList := cache.Diff(filelist[:])
 	fmt.Println(len(downloadList))
@@ -103,29 +106,16 @@ func Socket(uri string) {
 
 	// Init the object storage
 	// For test
-	minioConf := viper.GetStringMapString("minio")
+	//minioConf := viper.GetStringMapString("minio")
 
-	minioClient, err := minio.New(minioConf["endpoint"], minioConf["keyaccess"], minioConf["keysecret"], false)
-	if err != nil {
-		panic("minio Client failed to init")
-	}
+	//minioClient, err := minio.New(minioConf["endpoint"], minioConf["keyaccess"], minioConf["keysecret"], false)
+	//if err != nil {
+	//	panic("minio Client failed to init")
+	//}
 
-	// Create a bucket for the module
-	err = minioClient.MakeBucket(module, "us-east-1")
-	if err != nil {
-		// Check to see if we already own this bucket (which happens if you run this twice)
-		exists, errBucketExists := minioClient.BucketExists(module)
-		if errBucketExists == nil && exists {
-			log.Printf("We already own %s\n", module)
-		} else {
-			log.Fatalln(err)
-		}
-	} else {
-		log.Printf("Successfully created %s\n", module)
-	}
+
 
 	// Generate target file list
-	//rsync.RequestAFile(conn, "libnemo-extension1_1.8.1+maya_amd64.deb", &filelist)
 	//rsync.GetFiles(data, conn, &filelist)
 
 	// rsync.RequestFiles(conn, data, &filelist, minioClient, module, path)
@@ -144,6 +134,6 @@ func main() {
 		return
 	}
 	startTime := time.Now()
-	Socket(args[0])
+	Socket(args[0], args[1])
 	log.Println("Duration:", time.Since(startTime))
 }
