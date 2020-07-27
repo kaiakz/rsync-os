@@ -33,6 +33,7 @@ import (
 
 // Goroutine: Demultiplex the package, and push them to channel
 // data: Buffered Channel
+// FIXME: How to close the channel & goroutine
 func DeMuxChan(conn net.Conn, data chan byte) {
 	for {
 		// socket read the multipex data & put them to channel
@@ -168,8 +169,7 @@ func GetFile(data chan byte, index int32, filelist *FileList) {
 		}
 	}
 	log.Println("Buff Total size:", buf.Len())
-	//lookup(int64(buf.Len()), filelist)
-	//ioutil.WriteFile("temp.txt", buf.Bytes(), 0644)
+
 	WriteOS(buf, string(path))
 
 	lmd4 := md4.New()
@@ -182,6 +182,7 @@ func GetFile(data chan byte, index int32, filelist *FileList) {
 	log.Println("Compute MD4", lmd4.Sum(nil))
 }
 
+// Test & Deprecated
 func WriteOS(buf *bytes.Buffer, fname string) {
 	// For test
 	endpoint := "127.0.0.1:9000"

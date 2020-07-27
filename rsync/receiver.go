@@ -230,6 +230,7 @@ func RequestFiles(conn net.Conn, data chan byte, filelist *FileList, os *minio.C
 	Downloader(data, filelist, os, module, prepath)
 }
 
+// Test & Deprecated
 func RequestAFile(conn net.Conn, target string, filelist *FileList) {
 	// Compare all local files with file list, pick up the files that has different size, mtime
 	// Those files are `basis files`
@@ -254,6 +255,7 @@ func RequestAFile(conn net.Conn, target string, filelist *FileList) {
 	binary.Write(conn, binary.LittleEndian, int32(-1))
 }
 
+// TODO: It is better to update files in goroutine
 func Downloader(data chan byte, filelist *FileList, os *minio.Client, module string, prepath string) {
 
 	ppath := []byte(TrimPrepath(prepath))
