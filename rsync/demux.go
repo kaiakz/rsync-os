@@ -1,13 +1,9 @@
 package rsync
 
 import (
-	"bytes"
 	"encoding/binary"
 	"io"
 	"os"
-
-	"github.com/minio/minio-go/v6"
-	"golang.org/x/crypto/md4"
 
 	//"io/ioutil"
 	"log"
@@ -120,108 +116,3 @@ func GetVarint(data chan byte) int64 {
 	return GetLong(data)
 }
 
-// FIXME
-func GetFiles(data chan byte, conn net.Conn, filelist *FileList) {
-	for {
-		idx := GetInteger(data)
-		if idx == -1 {
-			return
-		}
-		log.Println("Server send the file: ", idx)
-		// TODO: idx out of range?
-
-		GetFile(data, idx, filelist)
-	}
-}
-
-func lookup(size int64, filelist *FileList) {
-	for i, f := range *filelist {
-		if f.Size == size {
-			log.Println("True File:", i, f)
-		}
-	}
-}
-
-// Test
-func GetFile(data chan byte, index int32, filelist *FileList) {
-
-	path := (*filelist)[index].Path
-
-	count := GetInteger(data)     /* block count */
-	blen := GetInteger(data)      /* block length */
-	clen := GetInteger(data)      /* checksum length */
-	remainder := GetInteger(data) /* block remainder */
-
-	log.Println(path, count, blen, clen, remainder, (*filelist)[index].Size)
-	buf := new(bytes.Buffer)
-	for {
-		token := GetInteger(data)
-		log.Println("TOKEN", token)
-		if token == 0 {
-			break
-		} else if token < 0 {
-			// Reference
-		} else {
-			ctx := make([]byte, token)
-			GetBytes(data, ctx)
-			log.Println("Buff size:", buf.Len())
-			buf.Write(ctx)
-		}
-	}
-	log.Println("Buff Total size:", buf.Len())
-
-	WriteOS(buf, string(path))
-
-	lmd4 := md4.New()
-	lmd4.Write(buf.Bytes())
-
-	// Remote MD4
-	rmd4 := make([]byte, 16)
-	GetBytes(data, rmd4)
-	log.Println("MD4", rmd4)
-	log.Println("Compute MD4", lmd4.Sum(nil))
-}
-
-// Test & Deprecated
-func WriteOS(buf *bytes.Buffer, fname string) {
-	// For test
-	endpoint := "127.0.0.1:9000"
-	accessKeyID := "minioadmin"
-	secretAccessKey := "minioadmin"
-
-	minioClient, err := minio.New(endpoint, accessKeyID, secretAccessKey, false)
-	if err != nil {
-		log.Println("MINIO")
-		return
-	}
-
-	// Make a new bucket called mymusic.
-	bucketName := "test"
-	//location := "cn"
-	log.Println("Making Bucket: test")
-	err = minioClient.MakeBucket(bucketName, "us-east-1")
-	if err != nil {
-		// Check to see if we already own this bucket (which happens if you run this twice)
-		exists, errBucketExists := minioClient.BucketExists(bucketName)
-		if errBucketExists == nil && exists {
-			log.Printf("We already own %s\n", bucketName)
-		} else {
-			log.Fatalln(err)
-		}
-	} else {
-		log.Printf("Successfully created %s\n", bucketName)
-	}
-
-	log.Println("Updating")
-	// Upload the zip file
-	//objectName := "golden-oldies.zip"
-	//contentType := "application/x-rpm"
-
-	// Upload the zip file with FPutObject
-	n, err := minioClient.PutObject(bucketName, fname, buf, int64(buf.Len()), minio.PutObjectOptions{})
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	log.Printf("Successfully uploaded %s of size %d\n", fname, n)
-}
