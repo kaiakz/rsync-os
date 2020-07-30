@@ -29,7 +29,7 @@ type Minio struct {
 //accessKeyID := "minioadmin"
 //secretAccessKey := "minioadmin"
 
-func New(bucket string, endpoint string, accessKeyID string, secretAccessKey string, secure bool) *Minio {
+func NewMinio(bucket string, endpoint string, accessKeyID string, secretAccessKey string, secure bool) *Minio {
 	minioClient, err := minio.New(endpoint, accessKeyID, secretAccessKey, false)
 	if err != nil {
 		panic("Failed to init a minio client")
@@ -68,7 +68,7 @@ func (m *Minio) Uploader() {
 }
 
 // object can be a regualar file, folder or symlink
-func (m *Minio) Write(objectName string, reader io.Reader, objectSize int64, metadata FileMetadata) (n int64, err error) {
+func (m *Minio) Write(objectName string, reader io.Reader, objectSize int64, metadata rsync.FileMetadata) (n int64, err error) {
 	data := make(map[string] string)
 	data["mtime"] = strconv.Itoa(int(metadata.Mtime))
 	data["mode"] = strconv.Itoa(int(metadata.Mode))

@@ -9,12 +9,11 @@ import (
 	"net"
 	"os"
 	"strings"
-
-	"github.com/minio/minio-go/v6"
+	"time"
 )
 
 type SocketConn struct {
-	Conn    net.Conn
+	RawConn net.Conn
 	DemuxIn chan byte
 	CksSeed int32
 	// Options
@@ -24,12 +23,12 @@ type SocketConn struct {
 // Header len 8		AUTHREQD: 18	"@RSYNCD: EXIT" 13		RSYNC_MODULE_LIST_QUERY "\n"
 
 // See clienserver.c start_inband_exchange
-func (c *SocketConn) HandShake(module string, path string) {
+func (conn *SocketConn) HandShake(module string, path string) {
 	// send my version
-	c.Conn.Write([]byte(RSYNC_VERSION))
+	conn.RawConn.Write([]byte(RSYNC_VERSION))
 
 	// receive server's protocol version and seed
-	versionStr, _ := ReadLine(c.Conn)
+	versionStr, _ := ReadLine(conn.RawConn)
 
 	// recv(version)
 	var remoteProtocol, remoteProtocolSub int
@@ -37,28 +36,28 @@ func (c *SocketConn) HandShake(module string, path string) {
 	log.Println(versionStr)
 
 	// send mod name
-	c.Conn.Write([]byte(module))
-	c.Conn.Write([]byte("\n"))
+	conn.RawConn.Write([]byte(module))
+	conn.RawConn.Write([]byte("\n"))
 
 	for {
 		// Wait for '@RSYNCD: OK': until \n, then add \0
-		res, _ := ReadLine(c.Conn)
+		res, _ := ReadLine(conn.RawConn)
 		log.Print(res)
-		if strings.Contains(res, "@RSYNCD: OK") {
+		if strings.Contains(res, RSYNCD_OK) {
 			break
 		}
 	}
 
-	c.SendArgs(module, path)
+	conn.SendArgs(module, path)
 
 	// read int32 as seed
-	c.CksSeed = ReadInteger(c.Conn)
-	log.Println("SEED", c.CksSeed)
+	conn.CksSeed = ReadInteger(conn.RawConn)
+	log.Println("SEED", conn.CksSeed)
 
-	c.SendEmptyExclusion()
+	conn.SendEmptyExclusion()
 }
 
-func (c *SocketConn) SendArgs(module string, path string) {
+func (conn *SocketConn) SendArgs(module string, path string) {
 	// send parameters list
 	// Sample "--server\n--sender\n-g\n-l\n-o\n-p\n-D\n-r\n-t\n.\nepel/7/SRPMS\n\n"
 	args := new(bytes.Buffer)
@@ -66,18 +65,18 @@ func (c *SocketConn) SendArgs(module string, path string) {
 	args.Write([]byte(module))
 	args.Write([]byte(path))
 	args.Write([]byte("\n\n"))
-	c.Conn.Write(args.Bytes())
+	conn.RawConn.Write(args.Bytes())
 }
 
-func (c *SocketConn) ListOnly(module string, path string) {
-	c.Conn.Write([]byte("@RSYNCD: 27.0\n"))
-	versionStr, _ := ReadLine(c.Conn)
+func (conn *SocketConn) ListOnly(module string, path string) {
+	conn.RawConn.Write([]byte("@RSYNCD: 27.0\n"))
+	versionStr, _ := ReadLine(conn.RawConn)
 	log.Println(versionStr)
 
-	c.Conn.Write([]byte(module))
-	c.Conn.Write([]byte("\n"))
+	conn.RawConn.Write([]byte(module))
+	conn.RawConn.Write([]byte("\n"))
 	for {
-		res, _ := ReadLine(c.Conn)
+		res, _ := ReadLine(conn.RawConn)
 		log.Print(res)
 		if strings.Contains(res, "@RSYNCD: OK") {
 			break
@@ -89,20 +88,20 @@ func (c *SocketConn) ListOnly(module string, path string) {
 	args.Write([]byte(module))
 	args.Write([]byte(path))
 	args.Write([]byte("\n\n"))
-	c.Conn.Write(args.Bytes())
+	conn.RawConn.Write(args.Bytes())
 
-	seed := ReadInteger(c.Conn)
+	seed := ReadInteger(conn.RawConn)
 	log.Println("SEED: ", seed)
 
-	c.Conn.Write(make([]byte, 4))
+	conn.RawConn.Write(make([]byte, 4))
 
-	c.FinalPhase()
+	conn.FinalPhase()
 
 }
 
-func (c *SocketConn) SendEmptyExclusion() {
+func (conn *SocketConn) SendEmptyExclusion() {
 	// send filter_list, empty is 32-bit zero
-	c.Conn.Write([]byte("\x00\x00\x00\x00"))
+	conn.RawConn.Write([]byte("\x00\x00\x00\x00"))
 }
 
 // file list: ends with '\0'
@@ -197,11 +196,11 @@ func GetFileList(data chan byte, filelist *FileList) error {
 	return nil
 }
 
-func (c *SocketConn) GetFL() (FileList, error) {
+func (conn *SocketConn) GetFL() (FileList, error) {
 	filelist := make(FileList, 0, 4096)
 	// recv_file_list
 	for {
-		if GetFileList(c.DemuxIn, &filelist) == io.EOF {
+		if GetFileList(conn.DemuxIn, &filelist) == io.EOF {
 			break
 		}
 	}
@@ -211,52 +210,32 @@ func (c *SocketConn) GetFL() (FileList, error) {
 
 /* Generator */
 
-func RequestFiles(conn net.Conn, data chan byte, filelist *FileList, os *minio.Client, module string, prepath string) {
-	empty := make([]byte, 16) // 4 + 4 + 4 + 4 bytes
+func (conn *SocketConn) RequestFiles(filelist *FileList, osClient IO, prepath string) {
+	empty := make([]byte, 16) // 4 + 4 + 4 + 4 bytes, all bytes set to 0
 	for i := 0; i < len(*filelist); i++ {
 		// TODO: Supports more file mode
-		if (*filelist)[i].Mode == 0100644 {
-			binary.Write(conn, binary.LittleEndian, int32(i))
+		if (*filelist)[i].Mode.IsRegular() {
+			if binary.Write(conn.RawConn, binary.LittleEndian, int32(i)) != nil {
+				panic("Failed to send index")
+			}
 
 			fmt.Println((*filelist)[i].Path)
-			conn.Write(empty)
-
+			conn.RawConn.Write(empty)
 		}
 
 	}
 	log.Println("Request completed")
-	// Finish
-	binary.Write(conn, binary.LittleEndian, int32(-1))
-	Downloader(data, filelist, os, module, prepath)
-}
+	// Send -1 to finish, then start to download
+	binary.Write(conn.RawConn, binary.LittleEndian, INDEX_END)
 
-// Test & Deprecated
-func RequestAFile(conn net.Conn, target string, filelist *FileList) {
-	// Compare all local files with file list, pick up the files that has different size, mtime
-	// Those files are `basis files`
-	var idx int32
 
-	// For test: here we request a file
-	for i := 0; i < len(*filelist); i++ {
-		if bytes.Contains((*filelist)[i].Path, []byte(target)) {
-			idx = int32(i)
-			log.Println("Pick:", (*filelist)[i], idx)
-			// identifier
-			binary.Write(conn, binary.LittleEndian, idx)
-			// block count, block length(default is 32768?), checksum length(default is 2?), block remainder, blocks(short+long)
-			// Just let them be empty(zero)
-			empty := make([]byte, 16) // 4 + 4 + 4 + 4 bytes
-			conn.Write(empty)         // ENDIAN?
-			// Empty checksum
-			break
-		}
-	}
-	// Finish
-	binary.Write(conn, binary.LittleEndian, int32(-1))
+	startTime := time.Now()
+	Downloader(conn.DemuxIn, filelist, osClient, prepath)
+	log.Println("Downloaded duration:", time.Since(startTime))
 }
 
 // TODO: It is better to update files in goroutine
-func Downloader(data chan byte, filelist *FileList, os *minio.Client, module string, prepath string) {
+func Downloader(data chan byte, filelist *FileList, osClient IO, prepath string) {
 
 	ppath := []byte(TrimPrepath(prepath))
 
@@ -292,7 +271,11 @@ func Downloader(data chan byte, filelist *FileList, os *minio.Client, module str
 
 		// Put file to object storage
 		objectName := string(append(ppath[:], path[:]...))	// prefix + path
-		n, err := os.PutObject(module, objectName, buf, int64(buf.Len()), minio.PutObjectOptions{})
+
+		n, err := osClient.Write(objectName, buf, int64(buf.Len()), FileMetadata{
+			Mtime: (*filelist)[index].Mtime,
+			Mode:  (*filelist)[index].Mode,
+		})
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -300,9 +283,16 @@ func Downloader(data chan byte, filelist *FileList, os *minio.Client, module str
 		log.Printf("Successfully uploaded %s of size %d\n", path, n)
 
 		// Remote MD4
+		// TODO: compare computed MD4 with remote MD4
 		rmd4 := make([]byte, 16)
 		GetBytes(data, rmd4)
-		fmt.Println("OK:", rmd4)
+		fmt.Println("Remote MD4:", rmd4)
+
+		//lmd4 := md4.New()
+		//lmd4.Write(buf.Bytes())
+		//if bytes.Compare(rmd4, lmd4.Sum(nil)) == 0 {
+		//
+		//}
 	}
 }
 
@@ -315,10 +305,10 @@ func exchangeBlock() {
 	// Download the data blocks, and write them into a file
 }
 
-func (c *SocketConn) FinalPhase() {
-	ioerror := GetInteger(c.DemuxIn)
+func (conn *SocketConn) FinalPhase() {
+	ioerror := GetInteger(conn.DemuxIn)
 	fmt.Println(ioerror)
 
-	binary.Write(c.Conn, binary.LittleEndian, INDEX_DONE)
-	binary.Write(c.Conn, binary.LittleEndian, INDEX_DONE)
+	binary.Write(conn.RawConn, binary.LittleEndian, INDEX_END)
+	binary.Write(conn.RawConn, binary.LittleEndian, INDEX_END)
 }

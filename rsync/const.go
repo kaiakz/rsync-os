@@ -3,6 +3,7 @@ package rsync
 const (
 	RSYNC_VERSION = "@RSYNCD: 27.3\n"
 	RSYNCD_OK     = "@RSYNCD: OK"
+	RSYNC_EXIT    = "@RSYNCD: EXIT"
 
 	INDEX_END       = int32(-1)
 	EMPTY_EXCLUSION = int32(0)
