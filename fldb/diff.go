@@ -33,6 +33,7 @@ func (cache *BoltDB) Diff(list rsync.FileList) ([]int, [][]byte) {
 		prefix := cache.prepath
 		i := 0
 		k, v := c.Seek(prefix)
+		plen := len(prefix)		// Skip prefix
 		for i < list.Len() && k != nil && bytes.HasPrefix(k, prefix) {
 			// The result will be 0 if a==b, -1 if a < b, and +1 if a > b.
 			// Compare their paths by bytes.Compare
@@ -40,7 +41,7 @@ func (cache *BoltDB) Diff(list rsync.FileList) ([]int, [][]byte) {
 			// If 1, B doesn't have
 			// If 0, A & B have
 			// If -1, A doesn't have
-			switch bytes.Compare(list[i].Path, k) {
+			switch bytes.Compare(list[i].Path, k[plen:]) {
 			case 0:
 				info := &FInfo{}
 				err := proto.Unmarshal(v, info)
