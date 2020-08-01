@@ -1,7 +1,9 @@
 package fldb
 
 import (
+	"github.com/golang/protobuf/proto"
 	bolt "go.etcd.io/bbolt"
+	"rsync-os/rsync"
 )
 
 type BoltDB struct {
@@ -26,35 +28,44 @@ func (c *BoltDB)Close() {
 	c.db.Close()
 }
 
-// func (cache *BoltDB) (info *rsync.FileInfo) error {
 
-// }
+func (cache *BoltDB) Update(list rsync.FileList, downloadList []int, deleteList [][]byte) error {
+	err := cache.db.Update(func(tx *bolt.Tx) error {
+		mod := tx.Bucket(cache.module)
+		// If bucket does not exist, create the bucket
+		if mod == nil {
+			panic("Bucket should be created")
+		}
 
-//func (cache *BoltDB) Put(info *rsync.FileInfo) error {
-//	key := []byte(cache.prepath + info.Path)
-//	value, err := proto.Marshal(&FInfo{
-//		Size:  info.Size,
-//		Mtime: info.Mtime,
-//		Mode:  info.Mode,
-//	})
-//	if err != nil {
-//		return err
-//	}
-//	return cache.module.Put(key, value)
-//}
-//
-//func (cache *BoltDB) Get(key []byte) *FInfo {
-//	value := cache.module.Get(key)
-//	if value != nil {
-//		info := &FInfo{}
-//		err := proto.Unmarshal(value, info)
-//		if err == nil {
-//			return info
-//		}
-//	}
-//	return nil
-//}
-//
+		// Insert new items in cache
+		for _, idx := range downloadList {
+			info := list[idx]
+			key := append(cache.prepath, info.Path...)
+			value, err := proto.Marshal(&FInfo{
+				Size:  info.Size,
+				Mtime: info.Mtime,
+				Mode:  int32(info.Mode),
+			})
+			if err != nil {
+				return err
+			}
+			return mod.Put(key, value)
+		}
+
+		// Remove items in cache
+		for _, rkey := range deleteList {
+			err := mod.Delete(rkey)
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	return err
+}
+
 //func (cache *BoltDB) PutAll(list *rsync.FileList) error {
 //	for _, info := range *list {
 //		err := cache.Put(&info)
