@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"bytes"
 	"github.com/minio/minio-go/v6"
 	"io"
 	"log"
@@ -73,19 +72,21 @@ func (m *Minio) Write(objectName string, reader io.Reader, objectSize int64, met
 	data["mtime"] = strconv.Itoa(int(metadata.Mtime))
 	data["mode"] = strconv.Itoa(int(metadata.Mode))
 
+	/* EXPERIMENTAL
 	// Folder
 	if metadata.Mode.IsDir() {
-		sign := new(bytes.Buffer)
+		ctx := new(bytes.Buffer)
 		signName := objectName + "/..."
 		// FIXME: How to handle a file named "..." as well ?
 		return m.client.PutObject(m.bucketName, signName, reader, int64(sign.Len()), minio.PutObjectOptions{UserMetadata: data})
 	}
 	// TODO: symlink
 	if metadata.Mode & os.ModeSymlink != 0 {
-		sign := new(bytes.Buffer)
+		ctx := new(bytes.Buffer)
 		// Additional data of symbol link
 		return m.client.PutObject(m.bucketName, objectName, reader, int64(sign.Len()), minio.PutObjectOptions{UserMetadata: data})
 	}
+	*/
 
 	return m.client.PutObject(m.bucketName, objectName, reader, objectSize, minio.PutObjectOptions{UserMetadata: data})
 }
@@ -95,6 +96,7 @@ func (m *Minio) Delete(objectName string) error {
 	return m.client.RemoveObject(m.bucketName, objectName)
 }
 
+// EXPERIMENTAL
 func (m *Minio) List() rsync.FileList {
 	filelist := make(rsync.FileList, 0, 1024 * 1024)
 
@@ -136,4 +138,16 @@ func (m *Minio) List() rsync.FileList {
 		})
 	}
 	return filelist[:]
+}
+
+func (m *Minio) DeleteAll(prefix []byte, deleteList [][]byte) error {
+	for _, rkey := range deleteList	{
+		key := string(append(prefix, rkey...))
+		// FIXME: ignore folder & symlink
+		err := m.Delete(key)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
