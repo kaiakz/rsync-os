@@ -38,14 +38,14 @@ func DeMuxChan(conn net.Conn, data chan byte) {
 		n, err := ReadExact(conn, header)
 		if n != 4 || err != nil {
 			// panic("Mulitplex: Check your wired protocol")
-			log.Println("Mulitplex: Check your wired protocol")
+			log.Println("Mulitplex: Check your wire protocol")
 			return
 		}
 
 		tag := header[3]                                        // Little Endian
 		size := (binary.LittleEndian.Uint32(header) & 0xffffff) // TODO: zero?
 
-		log.Println("*****TAG", tag, "SIZE", size, "*****")
+		log.Printf("<DEMUX> tag %d size %d\n", tag, size)
 
 		if tag == (MSG_BASE + MSG_DATA) { // MUL_BASE + MSG_DATA
 			body := make([]byte, size)

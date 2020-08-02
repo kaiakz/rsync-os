@@ -210,34 +210,42 @@ func (conn *SocketConn) GetFL() (FileList, error) {
 
 /* Generator */
 
-func (conn *SocketConn) RequestFiles(filelist *FileList, osClient IO, prepath string) {
-	empty := make([]byte, 16) // 4 + 4 + 4 + 4 bytes, all bytes set to 0
-	for i := 0; i < len(*filelist); i++ {
+func (conn *SocketConn) RequestFiles(filelist FileList, downloadList []int, osClient IO, prepath string) {
+	emptyBlocks := make([]byte, 16) // 4 + 4 + 4 + 4 bytes, all bytes set to 0
+	for _, v := range downloadList {
 		// TODO: Supports more file mode
-		if (*filelist)[i].Mode.IsRegular() {
-			if binary.Write(conn.RawConn, binary.LittleEndian, int32(i)) != nil {
+		if filelist[v].Mode == 0100644 || filelist[v].Mode == 0100755 {
+			if binary.Write(conn.RawConn, binary.LittleEndian, int32(v)) != nil {
 				panic("Failed to send index")
 			}
 
-			fmt.Println((*filelist)[i].Path)
-			conn.RawConn.Write(empty)
+			fmt.Println("Request: ", string(filelist[v].Path), uint32(filelist[v].Mode))
+			conn.RawConn.Write(emptyBlocks)
 		}
 
+		/* EXPERIMENTAL else {
+			// Handle folders & symbol links
+			emptyCtx := new(bytes.Buffer)
+			osClient.Write(prepath+string((*filelist)[i].Path), emptyCtx, int64(emptyCtx.Len()), FileMetadata{
+				Mtime: (*filelist)[i].Mtime,
+				Mode: (*filelist)[i].Mode,
+			})
+		}*/
 	}
-	log.Println("Request completed")
+
 	// Send -1 to finish, then start to download
 	binary.Write(conn.RawConn, binary.LittleEndian, INDEX_END)
-
+	log.Println("Request completed")
 
 	startTime := time.Now()
-	Downloader(conn.DemuxIn, filelist, osClient, prepath)
+	Downloader(conn.DemuxIn, filelist[:], osClient, prepath)
 	log.Println("Downloaded duration:", time.Since(startTime))
 }
 
 // TODO: It is better to update files in goroutine
-func Downloader(data chan byte, filelist *FileList, osClient IO, prepath string) {
+func Downloader(data chan byte, filelist FileList, osClient IO, prepath string) {
 
-	ppath := []byte(TrimPrepath(prepath))
+	ppath := []byte(prepath)
 
 	for {
 		index := GetInteger(data)
@@ -245,13 +253,13 @@ func Downloader(data chan byte, filelist *FileList, osClient IO, prepath string)
 			return
 		}
 		fmt.Println("INDEX:", index)
-		path := (*filelist)[index].Path
+		path := filelist[index].Path
 		count := GetInteger(data)     /* block count */
 		blen := GetInteger(data)      /* block length */
 		clen := GetInteger(data)      /* checksum length */
 		remainder := GetInteger(data) /* block remainder */
 
-		log.Println(path, count, blen, clen, remainder, (*filelist)[index].Size)
+		log.Println(path, count, blen, clen, remainder, filelist[index].Size)
 		buf := new(bytes.Buffer)
 		for {
 			token := GetInteger(data)
@@ -273,8 +281,8 @@ func Downloader(data chan byte, filelist *FileList, osClient IO, prepath string)
 		objectName := string(append(ppath[:], path[:]...))	// prefix + path
 
 		n, err := osClient.Write(objectName, buf, int64(buf.Len()), FileMetadata{
-			Mtime: (*filelist)[index].Mtime,
-			Mode:  (*filelist)[index].Mode,
+			Mtime: filelist[index].Mtime,
+			Mode:  filelist[index].Mode,
 		})
 		if err != nil {
 			log.Fatalln(err)
@@ -306,8 +314,10 @@ func exchangeBlock() {
 }
 
 func (conn *SocketConn) FinalPhase() {
-	ioerror := GetInteger(conn.DemuxIn)
-	fmt.Println(ioerror)
+	go func() {
+		ioerror := GetInteger(conn.DemuxIn)
+		fmt.Println(ioerror)
+	}()
 
 	binary.Write(conn.RawConn, binary.LittleEndian, INDEX_END)
 	binary.Write(conn.RawConn, binary.LittleEndian, INDEX_END)
