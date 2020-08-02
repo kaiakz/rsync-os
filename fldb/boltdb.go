@@ -24,10 +24,9 @@ func Open(path string, module []byte, prepath []byte) *BoltDB {
 	}
 }
 
-func (c *BoltDB)Close() {
+func (c *BoltDB) Close() {
 	c.db.Close()
 }
-
 
 func (cache *BoltDB) Update(list rsync.FileList, downloadList []int, deleteList [][]byte) error {
 	err := cache.db.Update(func(tx *bolt.Tx) error {
@@ -54,7 +53,8 @@ func (cache *BoltDB) Update(list rsync.FileList, downloadList []int, deleteList 
 
 		// Remove items in cache
 		for _, rkey := range deleteList {
-			err := mod.Delete(rkey)
+			key := append(cache.prepath, rkey...)
+			err := mod.Delete(key)
 			if err != nil {
 				return err
 			}
@@ -65,13 +65,3 @@ func (cache *BoltDB) Update(list rsync.FileList, downloadList []int, deleteList 
 
 	return err
 }
-
-//func (cache *BoltDB) PutAll(list *rsync.FileList) error {
-//	for _, info := range *list {
-//		err := cache.Put(&info)
-//		if err != nil {
-//			return err
-//		}
-//	}
-//	return nil
-//}
