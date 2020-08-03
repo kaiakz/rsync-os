@@ -52,7 +52,10 @@ func (cache *BoltDB) Update(list rsync.FileList, downloadList []int, deleteList 
 			if err != nil {
 				return err
 			}
-			return mod.Put(key, value)
+			err = mod.Put(key, value)
+			if err != nil {
+				return err
+			}
 		}
 
 		// Remove items in cache
