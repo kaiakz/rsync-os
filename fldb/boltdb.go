@@ -33,7 +33,11 @@ func (cache *BoltDB) Update(list rsync.FileList, downloadList []int, deleteList 
 		mod := tx.Bucket(cache.module)
 		// If bucket does not exist, create the bucket
 		if mod == nil {
-			panic("Bucket should be created")
+			var err error
+			mod, err = tx.CreateBucket(cache.module)
+			if err != nil {
+				return err
+			}
 		}
 
 		// Insert new items in cache

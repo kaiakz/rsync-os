@@ -20,13 +20,13 @@ func (cache *BoltDB) Diff(list rsync.FileList) ([]int, [][]byte) {
 	// Iterate cache.module(A) & list(B), both A & B must be sorted lexicographically before
 	err := cache.db.View(func(tx *bolt.Tx) error {
 		mod := tx.Bucket(cache.module)
-		// If bucket does not exist, create the bucket
+
 		if mod == nil {
-			var err error
-			mod, err = tx.CreateBucket(cache.module)
-			if err != nil {
-				return err
+			// If bucket does not exist, just appends all files to downloadList
+			for i, _ := range list {
+				downloadList = append(downloadList, i)
 			}
+			return nil
 		}
 
 		c := mod.Cursor()
@@ -79,7 +79,7 @@ func (cache *BoltDB) Diff(list rsync.FileList) ([]int, [][]byte) {
 		return nil
 	})
 	if err != nil {
-
+		log.Println("Failed to diff", err)
 	}
 
 	log.Println("Diff Duration", time.Since(startTime))
