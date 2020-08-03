@@ -55,7 +55,14 @@ func (cache *BoltDB) Diff(list rsync.FileList) ([]int, [][]byte) {
 				k, v = c.Next()
 				break
 			case 1:
-				deleteList = append(deleteList, k)
+				info := &FInfo{}
+				err := proto.Unmarshal(v, info)
+				if err != nil {
+					// TODO: handle folder & symlink
+				}
+				if info.Mode == 0100644 || info.Mode == 0100755 {	// ignore folder & symlink
+					deleteList = append(deleteList, k)
+				}
 				k, v = c.Next()
 				break
 			case -1:
