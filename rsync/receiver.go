@@ -25,21 +25,36 @@ type SocketConn struct {
 // Header len 8		AUTHREQD: 18	"@RSYNCD: EXIT" 13		RSYNC_MODULE_LIST_QUERY "\n"
 
 // See clienserver.c start_inband_exchange
-func (conn *SocketConn) HandShake(module string, path string) {
+func (conn *SocketConn) HandShake(module string, path string) error {
+	var err error = nil
+
 	// send my version
-	conn.RawConn.Write([]byte(RSYNC_VERSION))
+	_, err = conn.RawConn.Write([]byte(RSYNC_VERSION))
+	if err != nil {
+		return err
+	}
 
 	// receive server's protocol version and seed
 	versionStr, _ := ReadLine(conn.RawConn)
 
 	// recv(version)
 	var remoteProtocol, remoteProtocolSub int
-	fmt.Sscanf(versionStr, "@RSYNCD: %d.%d", remoteProtocol, remoteProtocolSub)
+	_, err = fmt.Sscanf(versionStr, "@RSYNCD: %d.%d", remoteProtocol, remoteProtocolSub)
+	if err != nil {
+		// FIXME: (panic)type not a pointer: int
+		//panic(err)
+	}
 	log.Println(versionStr)
 
 	// send mod name
-	conn.RawConn.Write([]byte(module))
-	conn.RawConn.Write([]byte("\n"))
+	_, err = conn.RawConn.Write([]byte(module))
+	if err != nil {
+		return err
+	}
+	_, err = conn.RawConn.Write([]byte("\n"))
+	if err != nil {
+		return err
+	}
 
 	for {
 		// Wait for '@RSYNCD: OK': until \n, then add \0
@@ -50,16 +65,19 @@ func (conn *SocketConn) HandShake(module string, path string) {
 		}
 	}
 
-	conn.SendArgs(module, path)
+	err = conn.SendArgs(module, path)
+	if err != nil {
+		return err
+	}
 
 	// read int32 as seed
 	conn.CksSeed = ReadInteger(conn.RawConn)
 	log.Println("SEED", conn.CksSeed)
 
-	conn.SendEmptyExclusion()
+	return conn.SendEmptyExclusion()
 }
 
-func (conn *SocketConn) SendArgs(module string, path string) {
+func (conn *SocketConn) SendArgs(module string, path string) error {
 	// send parameters list
 	// Sample "--server\n--sender\n-g\n-l\n-o\n-p\n-D\n-r\n-t\n.\nepel/7/SRPMS\n\n"
 	args := new(bytes.Buffer)
@@ -67,16 +85,30 @@ func (conn *SocketConn) SendArgs(module string, path string) {
 	args.Write([]byte(module))
 	args.Write([]byte(path))
 	args.Write([]byte("\n\n"))
-	conn.RawConn.Write(args.Bytes())
+	_, err := conn.RawConn.Write(args.Bytes())
+	return err
 }
 
-func (conn *SocketConn) ListOnly(module string, path string) {
-	conn.RawConn.Write([]byte("@RSYNCD: 27.0\n"))
+func (conn *SocketConn) ListOnly(module string, path string) error {
+	var err error
+	_, err = conn.RawConn.Write([]byte(RSYNC_VERSION))
+	if err != nil {
+		return err
+	}
+
 	versionStr, _ := ReadLine(conn.RawConn)
 	log.Println(versionStr)
 
-	conn.RawConn.Write([]byte(module))
-	conn.RawConn.Write([]byte("\n"))
+	_, err = conn.RawConn.Write([]byte(module))
+	if err != nil {
+		return err
+	}
+
+	_, err = conn.RawConn.Write([]byte("\n"))
+	if err != nil {
+		return err
+	}
+
 	for {
 		res, _ := ReadLine(conn.RawConn)
 		log.Print(res)
@@ -90,20 +122,26 @@ func (conn *SocketConn) ListOnly(module string, path string) {
 	args.Write([]byte(module))
 	args.Write([]byte(path))
 	args.Write([]byte("\n\n"))
-	conn.RawConn.Write(args.Bytes())
+	_, err = conn.RawConn.Write(args.Bytes())
+	if err != nil {
+		return err
+	}
 
 	seed := ReadInteger(conn.RawConn)
 	log.Println("SEED: ", seed)
 
-	conn.RawConn.Write(make([]byte, 4))
+	_, err = conn.RawConn.Write(make([]byte, 4))
+	if err != nil {
+		return err
+	}
 
-	conn.FinalPhase()
-
+	return conn.FinalPhase()
 }
 
-func (conn *SocketConn) SendEmptyExclusion() {
+func (conn *SocketConn) SendEmptyExclusion() error {
 	// send filter_list, empty is 32-bit zero
-	conn.RawConn.Write([]byte("\x00\x00\x00\x00"))
+	//_, err := conn.RawConn.Write([]byte("\x00\x00\x00\x00"))
+	return binary.Write(conn.RawConn, binary.LittleEndian, EMPTY_EXCLUSION)
 }
 
 // file list: ends with '\0'
@@ -212,17 +250,23 @@ func (conn *SocketConn) GetFL() (FileList, error) {
 
 /* Generator */
 
-func (conn *SocketConn) RequestFiles(filelist FileList, downloadList []int, osClient IO, prepath string) {
+func (conn *SocketConn) RequestFiles(filelist FileList, downloadList []int, osClient IO, prepath string) error {
 	emptyBlocks := make([]byte, 16) // 4 + 4 + 4 + 4 bytes, all bytes set to 0
+	var err error = nil
 	for _, v := range downloadList {
 		// TODO: Supports more file mode
 		if filelist[v].Mode == 0100644 || filelist[v].Mode == 0100755 {
-			if binary.Write(conn.RawConn, binary.LittleEndian, int32(v)) != nil {
-				panic("Failed to send index")
+			err = binary.Write(conn.RawConn, binary.LittleEndian, int32(v))
+			if err != nil {
+				log.Println("Failed to send index")
+				return err
 			}
 
 			fmt.Println("Request: ", string(filelist[v].Path), uint32(filelist[v].Mode))
-			conn.RawConn.Write(emptyBlocks)
+			_, err := conn.RawConn.Write(emptyBlocks)
+			if err != nil {
+				return err
+			}
 		}
 
 		/* EXPERIMENTAL else {
@@ -236,14 +280,17 @@ func (conn *SocketConn) RequestFiles(filelist FileList, downloadList []int, osCl
 	}
 
 	// Send -1 to finish, then start to download
-	if binary.Write(conn.RawConn, binary.LittleEndian, INDEX_END) != nil {
-		panic("Can't send INDEX_END")
+	err = binary.Write(conn.RawConn, binary.LittleEndian, INDEX_END)
+	if err != nil {
+		log.Println("Can't send INDEX_END")
+		return err
 	}
 	log.Println("Request completed")
 
 	startTime := time.Now()
 	Downloader(conn.DemuxIn, filelist[:], osClient, prepath)
 	log.Println("Downloaded duration:", time.Since(startTime))
+	return nil
 }
 
 // TODO: It is better to update files in goroutine
@@ -282,7 +329,10 @@ func Downloader(data chan byte, filelist FileList, osClient IO, prepath string) 
 				GetBytes(data, ctx)
 				downloadeSize += int(token)
 				log.Println("Downloaded:", downloadeSize, "byte")
-				bufwriter.Write(ctx)
+				_, err := bufwriter.Write(ctx)
+				if err != nil {
+					panic(err)
+				}
 			}
 		}
 		if bufwriter.Flush() != nil {
@@ -334,13 +384,15 @@ func exchangeBlock() {
 	// Download the data blocks, and write them into a file
 }
 
-func (conn *SocketConn) FinalPhase() {
+func (conn *SocketConn) FinalPhase() error {
 	go func() {
 		ioerror := GetInteger(conn.DemuxIn)
 		log.Println(ioerror)
 	}()
 
-	if binary.Write(conn.RawConn, binary.LittleEndian, INDEX_END) != nil && binary.Write(conn.RawConn, binary.LittleEndian, INDEX_END) != nil {
-		panic("Failed to say goodbye")
+	err := binary.Write(conn.RawConn, binary.LittleEndian, INDEX_END)
+	if err != nil {
+		return err
 	}
+	return binary.Write(conn.RawConn, binary.LittleEndian, INDEX_END)
 }
