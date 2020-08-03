@@ -11,14 +11,24 @@
 
 ## Roadmap
 ### Client
-- [x] Parse rsync://
-- [x] Connect to rsync server
-- [x] Hand shake
-- [x] Send argument list
-- [x] Fetch the file list
-- [x] Request & download files
-- [x] File List Caching
-- [ ] CLI
+#### Rsync wire protocol 27:
+- [x] Parses rsync://
+- [x] Connects to rsync server
+- [x] Hand shaking
+- [x] Sends argument list
+- [x] Fetches the file list
+- [x] Requests & download files
+- [ ] Handles error
+#### File List Caching
+- [x] BoltDB backend
+- [ ] Redis backend
+- [x] Diff 
+- [x] Update
+#### Storage backend
+- [x] Minio: supports regular files
+- [ ] Minio: supports folder & symlink
+#### Other
+- [x] CLI
 
 ## Detailed Information
 #### What's the difference between rsync and rsync-os
