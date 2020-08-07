@@ -31,10 +31,12 @@ import (
 // data: Buffered Channel
 // FIXME: How to close the channel & goroutine
 func DeMuxChan(conn net.Conn, data chan byte) {
-	for {
-		// socket read the multipex data & put them to channel
-		header := make([]byte, 4) // Header size: 4 bytes
+	// conn read the multipex data & put them to channel
+	header := make([]byte, 4)	// Header size: 4 bytes
+	var dsize uint32 = 1 << 16	// Default size: 65536
+	bytespool := make([]byte, dsize)
 
+	for {
 		n, err := ReadExact(conn, header)
 		if n != 4 || err != nil {
 			// panic("Mulitplex: Check your wired protocol")
@@ -48,7 +50,12 @@ func DeMuxChan(conn net.Conn, data chan byte) {
 		log.Printf("<DEMUX> tag %d size %d\n", tag, size)
 
 		if tag == (MSG_BASE + MSG_DATA) { // MUL_BASE + MSG_DATA
-			body := make([]byte, size)
+			if size > dsize {
+				bytespool = make([]byte, size)
+				dsize = size
+			}
+
+			body := bytespool[:size]
 
 			_, err := ReadExact(conn, body)
 
