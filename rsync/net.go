@@ -4,11 +4,13 @@ import (
 	"encoding/binary"
 )
 
+// io.Reader + io.Closer
 type Reader interface {
 	Read(p []byte) (n int, err error)
 	Close() error
 }
 
+// io.Writer + io.Closer
 type Writer interface {
 	Write(p []byte) (n int, err error)
 	Close() error
@@ -16,17 +18,17 @@ type Writer interface {
 
 // This struct has two main attributes, both of them can be used for a plain socket or an SSH channel
 type Conn struct {
-	Writer    Writer // Read only
-	Reader    Reader // Write only
-	bytespool []byte    // Default size: 8 bytes
+	writer    Writer // Read only
+	reader    Reader // Write only
+	bytespool []byte // Default size: 8 bytes
 }
 
 func (conn *Conn) Write(p []byte) (n int, err error) {
-	return conn.Writer.Write(p)
+	return conn.writer.Write(p)
 }
 
 func (conn *Conn) Read(p []byte) (n int, err error) {
-	return conn.Reader.Read(p)
+	return conn.reader.Read(p)
 }
 
 /* Encoding: little endian */
@@ -64,13 +66,26 @@ func (conn *Conn) ReadVarint() int64 {
 }
 
 // For Byte, Short, Int or Long (excepts Varint)
-func (conn *Conn) WriteNumerical(val interface{}) error {
-	return binary.Write(conn.Writer, binary.LittleEndian, val)
+
+func  (conn *Conn) WriteByte(data byte) error {
+	return binary.Write(conn.writer, binary.LittleEndian, data)
 }
 
-// TODO: In fact, both Writer and Reader are based on a same Connection (socket, SSH), how to close them twice?
+func  (conn *Conn) WriteShort(data int16) error {
+	return binary.Write(conn.writer, binary.LittleEndian, data)
+}
+
+func  (conn *Conn) WriteInt(data int32) error {
+	return binary.Write(conn.writer, binary.LittleEndian, data)
+}
+
+func  (conn *Conn) WriteLong(data int64) error {
+	return binary.Write(conn.writer, binary.LittleEndian, data)
+}
+
+// TODO: In fact, both writer and reader are based on a same Connection (socket, SSH), how to close them twice?
 func (conn *Conn) Close() error {
-	_ = conn.Writer.Close()
-	_ = conn.Reader.Close()
+	_ = conn.writer.Close()
+	_ = conn.reader.Close()
 	return nil
 }
