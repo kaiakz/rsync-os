@@ -49,7 +49,7 @@ func DeMuxChan(conn net.Conn, data chan byte) {
 
 		log.Printf("<DEMUX> tag %d size %d\n", tag, size)
 
-		if tag == (MSG_BASE + MSG_DATA) { // MUL_BASE + MSG_DATA
+		if tag == (MUX_BASE + MSG_DATA) { // MUX_BASE + MSG_DATA
 			if size > dsize {
 				bytespool = make([]byte, size)
 				dsize = size

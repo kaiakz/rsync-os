@@ -24,8 +24,8 @@ const (
 	SAMPLE_ARGS      = "--server\n--sender\n-l\n-p\n-r\n-t\n.\n"
 	SAMPLE_LIST_ARGS = "--server\n--sender\n--list-only\n-l\n-p\n-r\n-t\n.\n"
 
-	// Multiplex(1 byte)
-	MSG_BASE       = 7
+	// For Multiplex(1 byte)
+	MUX_BASE       = 7
 	MSG_DATA       = 0
 	MSG_ERROR_XFER = 1
 	MSG_INFO       = 2
@@ -37,7 +37,7 @@ const (
 	MSG_DELETED    = 101
 	MSG_NO_SEND    = 102
 
-	// FILE LIST(1 byte)
+	// For FILE LIST(1 byte)
 	FLIST_END       = 0x00
 	FLIST_TOP_LEVEL = 0x01 /* needed for remote --delete */
 	FLIST_MODE_SAME = 0x02 /* mode is repeat */

@@ -248,9 +248,7 @@ func (conn *SocketConn) GetFL() (FileList, error) {
 	return filelist[:], nil
 }
 
-/* Generator */
-
-func (conn *SocketConn) RequestFiles(filelist FileList, downloadList []int, osClient IO, prepath string) error {
+func (conn *SocketConn) RequestFiles(filelist FileList, downloadList []int, osClient FS, prepath string) error {
 	emptyBlocks := make([]byte, 16) // 4 + 4 + 4 + 4 bytes, all bytes set to 0
 	var err error = nil
 	for _, v := range downloadList {
@@ -272,7 +270,7 @@ func (conn *SocketConn) RequestFiles(filelist FileList, downloadList []int, osCl
 		/* EXPERIMENTAL else {
 			// Handle folders & symbol links
 			emptyCtx := new(bytes.Buffer)
-			osClient.Write(prepath+string((*filelist)[i].Path), emptyCtx, int64(emptyCtx.Len()), FileMetadata{
+			osClient.Put(prepath+string((*filelist)[i].Path), emptyCtx, int64(emptyCtx.Len()), FileMetadata{
 				Mtime: (*filelist)[i].Mtime,
 				Mode: (*filelist)[i].Mode,
 			})
@@ -294,13 +292,13 @@ func (conn *SocketConn) RequestFiles(filelist FileList, downloadList []int, osCl
 }
 
 // TODO: It is better to update files in goroutine
-func Downloader(data chan byte, filelist FileList, osClient IO, prepath string) {
+func Downloader(data chan byte, filelist FileList, osClient FS, prepath string) {
 
 	ppath := []byte(prepath)
 
 	for {
 		index := GetInteger(data)
-		if index == -1 {
+		if index == INDEX_END {	// -1 means the end of transfer files
 			return
 		}
 		fmt.Println("INDEX:", index)
@@ -347,7 +345,7 @@ func Downloader(data chan byte, filelist FileList, osClient IO, prepath string) 
 		)
 		n, err = buffer.Seek(0, io.SeekStart)
 
-		n, err = osClient.Write(objectName, buffer, int64(downloadeSize), FileMetadata{
+		n, err = osClient.Put(objectName, buffer, int64(downloadeSize), FileMetadata{
 			Mtime: filelist[index].Mtime,
 			Mode:  filelist[index].Mode,
 		})
