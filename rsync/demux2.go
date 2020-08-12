@@ -22,14 +22,14 @@ import (
 //server
 
 type MuxReader struct {
-	reader  io.ReadCloser
+	in      io.ReadCloser
 	Data    chan byte
 	closeCh chan byte
 }
 
 func NewMuxReader(reader io.ReadCloser) *MuxReader {
 	mr := &MuxReader{
-		reader:  reader,
+		in:      reader,
 		Data:    make(chan byte, 16 * MB),
 		closeCh: make(chan byte),
 	}
@@ -97,5 +97,5 @@ func (r *MuxReader) Read(p []byte) (n int, err error) {
 
 func (r *MuxReader) Close() error {
 	r.closeCh <- 0	// close the channel Data & exit the demux goroutine
-	return r.reader.Close()
+	return r.in.Close()
 }
