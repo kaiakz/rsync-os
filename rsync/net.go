@@ -5,6 +5,10 @@ import (
 	"io"
 )
 
+type Peer interface {
+	Run()
+}
+
 // io.ReadWriteCloser
 // This struct has two main attributes, both of them can be used for a plain socket or an SSH
 type Conn struct {
