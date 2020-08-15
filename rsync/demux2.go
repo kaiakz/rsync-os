@@ -30,7 +30,7 @@ type MuxReader struct {
 func NewMuxReader(reader io.ReadCloser) *MuxReader {
 	mr := &MuxReader{
 		in:      reader,
-		Data:    make(chan byte, 16 * MB),
+		Data:    make(chan byte, 16 * M),
 		closeCh: make(chan byte),
 	}
 	// Demux in Goroutine

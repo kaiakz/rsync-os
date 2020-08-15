@@ -5,9 +5,9 @@ const (
 	RSYNCD_OK     = "@RSYNCD: OK"
 	RSYNC_EXIT    = "@RSYNCD: EXIT"
 
-	KB = 1 << 10
-	MB = 1 << 20
-	GB = 1 << 30
+	K = 1 << 10
+	M  = 1 << 20
+	G = 1 << 30
 
 	INDEX_END       = int32(-1)
 	EMPTY_EXCLUSION = int32(0)
