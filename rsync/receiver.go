@@ -3,39 +3,50 @@ package rsync
 import (
 	"bufio"
 	"bytes"
-	"encoding/binary"
+	"errors"
 	"fmt"
 	"github.com/kaiakz/ubuffer"
 	"io"
 	"log"
 	"net"
 	"os"
+	"sort"
 	"strings"
 	"time"
 )
 
-type SocketConn struct {
-	RawConn net.Conn
-	DemuxIn chan byte
-	CksSeed int32
-	// Options
+/* Receiver:
+1. Receive File list
+2. Request files by sending files' index
+3. Receive Files, pass the files to storage
+*/
+type Receiver struct {
+	conn *Conn
+	module string
+	path string
+	seed int32
+	storage FS
 }
 
-// Header: '@RSYNCD: 31.0\n' + ? + '\n' + arguments + '\0'
-// Header len 8		AUTHREQD: 18	"@RSYNCD: EXIT" 13		RSYNC_MODULE_LIST_QUERY "\n"
-
-// See clienserver.c start_inband_exchange
-func (conn *SocketConn) HandShake(module string, path string) error {
-	var err error = nil
-
-	// send my version
-	_, err = conn.RawConn.Write([]byte(RSYNC_VERSION))
+func NewSocket(address string, module string, path string) (*Receiver, error) {
+	skt, err := net.Dial("tcp", address)
 	if err != nil {
-		return err
+		return nil, err
+	}
+
+	conn := new(Conn)
+	conn.reader = skt
+	conn.writer = skt
+
+	/* HandShake by socket */
+	// send my version
+	_, err = conn.Write([]byte(RSYNC_VERSION))
+	if err != nil {
+		return nil, err
 	}
 
 	// receive server's protocol version and seed
-	versionStr, _ := ReadLine(conn.RawConn)
+	versionStr, _ := readLine(conn)
 
 	// recv(version)
 	var remoteProtocol, remoteProtocolSub int
@@ -46,222 +57,216 @@ func (conn *SocketConn) HandShake(module string, path string) error {
 	}
 	log.Println(versionStr)
 
-	// send mod name
-	_, err = conn.RawConn.Write([]byte(module))
-	if err != nil {
-		return err
-	}
-	_, err = conn.RawConn.Write([]byte("\n"))
-	if err != nil {
-		return err
-	}
+	buf := new(bytes.Buffer)
 
+	// send mod name
+	buf.WriteString(module)
+	buf.WriteByte('\n')
+	_, err = conn.Write(buf.Bytes())
+	if err != nil {
+		return nil, err
+	}
+	buf.Reset()
+
+	// Wait for '@RSYNCD: OK'
 	for {
-		// Wait for '@RSYNCD: OK': until \n, then add \0
-		res, _ := ReadLine(conn.RawConn)
+		res, err := readLine(conn)
+		if err != nil {
+			return nil, err
+		}
 		log.Print(res)
 		if strings.Contains(res, RSYNCD_OK) {
 			break
 		}
 	}
 
-	err = conn.SendArgs(module, path)
+	// Send arguments
+	buf.Write([]byte(SAMPLE_ARGS))
+	buf.Write([]byte(module))
+	buf.Write([]byte(path))
+	buf.Write([]byte("\n\n"))
+	_, err = conn.Write(buf.Bytes())
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// read int32 as seed
-	conn.CksSeed = ReadInteger(conn.RawConn)
-	log.Println("SEED", conn.CksSeed)
+	seed, err := conn.ReadInt()
+	if err != nil {
+		return nil, err
+	}
+	log.Println("SEED", seed)
 
-	return conn.SendEmptyExclusion()
+	// HandShake OK
+	// Begin to demux
+	conn.reader = NewMuxReader(conn.reader)
+
+	return &Receiver{
+		conn:   conn,
+		module: module,
+		path:   path,
+		seed:   seed,
+	}, nil
 }
 
-func (conn *SocketConn) SendArgs(module string, path string) error {
-	// send parameters list
-	// Sample "--server\n--sender\n-g\n-l\n-o\n-p\n-D\n-r\n-t\n.\nepel/7/SRPMS\n\n"
-	args := new(bytes.Buffer)
-	args.Write([]byte(SAMPLE_ARGS))
-	args.Write([]byte(module))
-	args.Write([]byte(path))
-	args.Write([]byte("\n\n"))
-	_, err := conn.RawConn.Write(args.Bytes())
-	return err
+func NewSsh(address string, module string, path string) (*Receiver, error) {
+	return nil, nil
 }
 
-func (conn *SocketConn) ListOnly(module string, path string) error {
-	var err error
-	_, err = conn.RawConn.Write([]byte(RSYNC_VERSION))
-	if err != nil {
-		return err
-	}
+func (r *Receiver) BuildArgs() string {
+	return ""
+}
 
-	versionStr, _ := ReadLine(conn.RawConn)
-	log.Println(versionStr)
+// DeMux was started here
+func (r *Receiver) StartMuxIn() {
+	r.conn.reader = NewMuxReader(r.conn.reader)
+}
 
-	_, err = conn.RawConn.Write([]byte(module))
-	if err != nil {
-		return err
-	}
+func (r *Receiver) SendExclusions() error {
+	// Send exclusion
+	return r.conn.WriteInt(EMPTY_EXCLUSION)
+}
 
-	_, err = conn.RawConn.Write([]byte("\n"))
-	if err != nil {
-		return err
-	}
-
+func (r *Receiver) GetFileList() (FileList, error) {
+	filelist := make(FileList, 0, 1 *M)
 	for {
-		res, _ := ReadLine(conn.RawConn)
-		log.Print(res)
-		if strings.Contains(res, "@RSYNCD: OK") {
+		flags, _ := r.conn.ReadByte()
+
+		var partial, pathlen uint32 = 0, 0
+
+		//fmt.Printf("[%d]\n", flags)
+
+		// TODO: refactor
+		if flags == 0 {
 			break
 		}
-	}
 
-	args := new(bytes.Buffer)
-	args.Write([]byte(SAMPLE_LIST_ARGS))
-	args.Write([]byte(module))
-	args.Write([]byte(path))
-	args.Write([]byte("\n\n"))
-	_, err = conn.RawConn.Write(args.Bytes())
-	if err != nil {
-		return err
-	}
-
-	seed := ReadInteger(conn.RawConn)
-	log.Println("SEED: ", seed)
-
-	_, err = conn.RawConn.Write(make([]byte, 4))
-	if err != nil {
-		return err
-	}
-
-	return conn.FinalPhase()
-}
-
-func (conn *SocketConn) SendEmptyExclusion() error {
-	// send filter_list, empty is 32-bit zero
-	//_, err := conn.RawConn.Write([]byte("\x00\x00\x00\x00"))
-	return binary.Write(conn.RawConn, binary.LittleEndian, EMPTY_EXCLUSION)
-}
-
-// file list: ends with '\0'
-func GetFileList(data chan byte, filelist *FileList) error {
-
-	flags := <-data
-
-	var partial, pathlen uint32 = 0, 0
-
-	//fmt.Printf("[%d]\n", flags)
-
-	// TODO: refactor
-	if flags == 0 {
-		return io.EOF
-	}
-
-	/*
-	 * Read our filename.
-	 * If we have FLIST_NAME_SAME, we inherit some of the last
-	 * transmitted name.
-	 * If we have FLIST_NAME_LONG, then the string length is greater
-	 * than byte-size.
-	 */
-	if (flags & FLIST_NAME_SAME) != 0 {
-		partial = uint32(GetByte(data))
-		//fmt.Println("Partical", partial)
-	}
-
-	/* Get the (possibly-remaining) filename length. */
-	if (flags & FLIST_NAME_LONG) != 0 {
-		pathlen = uint32(GetInteger(data)) // can't use for rsync 31
-
-	} else {
-		pathlen = uint32(<-data)
-	}
-	//fmt.Println("PathLen", pathlen)
-
-	/* Allocate our full filename length. */
-	/* FIXME: maximum pathname length. */
-	// TODO: if pathlen + partical == 0
-	// malloc len error?
-
-	p := make([]byte, pathlen)
-	GetBytes(data, p)
-	path := make([]byte, 0, pathlen)
-	/* If so, use last */
-	if (flags & FLIST_NAME_SAME) != 0 { // FLIST_NAME_SAME
-		last := (*filelist)[len(*filelist)-1]
-		path = append(path, last.Path[0:partial]...)
-	}
-	path = append(path, p...)
-	//fmt.Println("Path ", string(path))
-
-	size := GetVarint(data)
-	//fmt.Println("Size ", size)
-
-	/* Read the modification time. */
-	var mtime int32
-	if (flags & FLIST_TIME_SAME) == 0 {
-		mtime = GetInteger(data)
-
-	} else {
-		mtime = (*filelist)[len(*filelist)-1].Mtime
-	}
-	//fmt.Println("MTIME ", mtime)
-
-	/* Read the file mode. */
-	var mode os.FileMode
-	if (flags & FLIST_MODE_SAME) == 0 {
-		mode = GetFileMode(data)
-
-	} else {
-		mode = (*filelist)[len(*filelist)-1].Mode
-	}
-	//fmt.Println("Mode", uint32(mode))
-
-	// FIXME: Sym link
-	if ((mode & 32768) != 0) && ((mode & 8192) != 0) {
-		sllen := uint32(GetInteger(data))
-		slink := make([]byte, sllen)
-		GetBytes(data, slink)
-		//fmt.Println("Symbolic Len:", len, "Content:", slink)
-	}
-
-	*filelist = append(*filelist, FileInfo{
-		Path:  path,
-		Size:  size,
-		Mtime: mtime,
-		Mode:  mode,
-	})
-
-	return nil
-}
-
-func (conn *SocketConn) GetFL() (FileList, error) {
-	filelist := make(FileList, 0, 4096)
-	// recv_file_list
-	for {
-		if GetFileList(conn.DemuxIn, &filelist) == io.EOF {
-			break
+		/*
+		 * Read our filename.
+		 * If we have FLIST_NAME_SAME, we inherit some of the last
+		 * transmitted name.
+		 * If we have FLIST_NAME_LONG, then the string length is greater
+		 * than byte-size.
+		 */
+		if (flags & FLIST_NAME_SAME) != 0 {
+			val, err := r.conn.ReadByte()
+			if err != nil {
+				return filelist[:], err
+			}
+			partial = uint32(val)
+			//fmt.Println("Partical", partial)
 		}
+
+		/* Get the (possibly-remaining) filename length. */
+		if (flags & FLIST_NAME_LONG) != 0 {
+			val, err := r.conn.ReadInt()
+			if err != nil {
+				return filelist[:], err
+			}
+			pathlen = uint32(val) // can't use for rsync 31
+
+		} else {
+			val, err := r.conn.ReadByte()
+			if err != nil {
+				return filelist[:], err
+			}
+			pathlen = uint32(val)
+		}
+		//fmt.Println("PathLen", pathlen)
+
+		/* Allocate our full filename length. */
+		/* FIXME: maximum pathname length. */
+		// TODO: if pathlen + partical == 0
+		// malloc len error?
+
+		p := make([]byte, pathlen)
+		_, err := r.conn.Read(p)
+		if err != nil {
+			panic("Failed to read path")
+		}
+
+		path := make([]byte, 0, partial + pathlen)
+		/* If so, use last */
+		if (flags & FLIST_NAME_SAME) != 0 { // FLIST_NAME_SAME
+			last := filelist[len(filelist)-1]
+			path = append(path, last.Path[0:partial]...)
+		}
+		path = append(path, p...)
+		//fmt.Println("Path ", string(path))
+
+		size, err := r.conn.ReadVarint()
+		if err != nil {
+			return filelist[:], err
+		}
+		//fmt.Println("Size ", size)
+
+		/* Read the modification time. */
+		var mtime int32
+		if (flags & FLIST_TIME_SAME) == 0 {
+			mtime, err = r.conn.ReadInt()
+			if err != nil {
+				return filelist[:], err
+			}
+		} else {
+			mtime = filelist[len(filelist)-1].Mtime
+		}
+		//fmt.Println("MTIME ", mtime)
+
+		/* Read the file mode. */
+		var mode os.FileMode
+		if (flags & FLIST_MODE_SAME) == 0 {
+			val, err := r.conn.ReadInt()
+			if err != nil {
+				return filelist[:], err
+			}
+			mode = os.FileMode(val)
+		} else {
+			mode = filelist[len(filelist)-1].Mode
+		}
+		//fmt.Println("Mode", uint32(mode))
+
+		// TODO: Sym link
+		if ((mode & 32768) != 0) && ((mode & 8192) != 0) {
+			sllen, err := r.conn.ReadInt()
+			if err != nil {
+				return filelist[:], err
+			}
+			slink := make([]byte, sllen)
+			_, err = r.conn.Read(slink)
+			if err != nil {
+				panic("Failed to read symlink")
+			}
+			//fmt.Println("Symbolic Len:", len, "Content:", slink)
+		}
+
+		filelist = append(filelist, FileInfo{
+			Path:  path,
+			Size:  size,
+			Mtime: mtime,
+			Mode:  mode,
+		})
 	}
-	log.Println("File List Received, total size is", len(filelist))
+
+	// Sort the filelist lexicographically
+	sort.Sort(filelist)
+
 	return filelist[:], nil
 }
 
-func (conn *SocketConn) RequestFiles(filelist FileList, downloadList []int, osClient FS, prepath string) error {
+func (r *Receiver) RequestFiles(filelist FileList, downloadList []int, osClient FS, prepath string) error {
 	emptyBlocks := make([]byte, 16) // 4 + 4 + 4 + 4 bytes, all bytes set to 0
 	var err error = nil
 	for _, v := range downloadList {
 		// TODO: Supports more file mode
 		if filelist[v].Mode == 0100644 || filelist[v].Mode == 0100755 {
-			err = binary.Write(conn.RawConn, binary.LittleEndian, int32(v))
+			err = r.conn.WriteInt(int32(v))
 			if err != nil {
 				log.Println("Failed to send index")
 				return err
 			}
 
 			fmt.Println("Request: ", string(filelist[v].Path), uint32(filelist[v].Mode))
-			_, err := conn.RawConn.Write(emptyBlocks)
+			_, err := r.conn.Write(emptyBlocks)
 			if err != nil {
 				return err
 			}
@@ -278,7 +283,7 @@ func (conn *SocketConn) RequestFiles(filelist FileList, downloadList []int, osCl
 	}
 
 	// Send -1 to finish, then start to download
-	err = binary.Write(conn.RawConn, binary.LittleEndian, INDEX_END)
+	err = r.conn.WriteInt(INDEX_END)
 	if err != nil {
 		log.Println("Can't send INDEX_END")
 		return err
@@ -286,28 +291,48 @@ func (conn *SocketConn) RequestFiles(filelist FileList, downloadList []int, osCl
 	log.Println("Request completed")
 
 	startTime := time.Now()
-	Downloader(conn.DemuxIn, filelist[:], osClient, prepath)
+	err = r.Downloader(filelist[:], osClient, prepath)
 	log.Println("Downloaded duration:", time.Since(startTime))
-	return nil
+	return err
 }
 
 // TODO: It is better to update files in goroutine
-func Downloader(data chan byte, filelist FileList, osClient FS, prepath string) {
+func (r *Receiver) Downloader(filelist FileList, osClient FS, prepath string) error {
 
 	ppath := []byte(prepath)
+	rmd4 := make([]byte, 16)
 
 	for {
-		index := GetInteger(data)
+		index, err := r.conn.ReadInt()
+		if err != nil {
+			return err
+		}
 		if index == INDEX_END {	// -1 means the end of transfer files
-			return
+			return nil
 		}
 		fmt.Println("INDEX:", index)
-		path := filelist[index].Path
-		count := GetInteger(data)     /* block count */
-		blen := GetInteger(data)      /* block length */
-		clen := GetInteger(data)      /* checksum length */
-		remainder := GetInteger(data) /* block remainder */
 
+		count, err := r.conn.ReadInt()     /* block count */
+		if err != nil {
+			return err
+		}
+
+		blen, err := r.conn.ReadInt()      /* block length */
+		if err != nil {
+			return err
+		}
+
+		clen, err := r.conn.ReadInt()     /* checksum length */
+		if err != nil {
+			return err
+		}
+
+		remainder, err := r.conn.ReadInt() /* block remainder */
+		if err != nil {
+			return err
+		}
+
+		path := filelist[index].Path
 		log.Println("Downloading:", string(path), count, blen, clen, remainder, filelist[index].Size)
 
 		// If the file is too big to store in memory, creates a temporary file in the directory 'tmp'
@@ -315,34 +340,37 @@ func Downloader(data chan byte, filelist FileList, osClient FS, prepath string) 
 		downloadeSize := 0
 		bufwriter := bufio.NewWriter(buffer)
 		for {
-			token := GetInteger(data)
+			token, err := r.conn.ReadInt()
+			if err != nil {
+				return err
+			}
 			log.Println("TOKEN", token)
 			if token == 0 {
 				break
 			} else if token < 0 {
-				panic("Does not support block checksum")
+				return errors.New("Does not support block checksum")
 				// Reference
 			} else {
 				ctx := make([]byte, token)		// FIXME: memory leak?
-				GetBytes(data, ctx)
+				_, err = io.ReadFull(r.conn, ctx)
+				if err != nil {
+					return err
+				}
 				downloadeSize += int(token)
 				log.Println("Downloaded:", downloadeSize, "byte")
 				_, err := bufwriter.Write(ctx)
 				if err != nil {
-					panic(err)
+					return err
 				}
 			}
 		}
 		if bufwriter.Flush() != nil {
-			panic("Failed to flush buffer")
+			return errors.New("Failed to flush buffer")
 		}
 		// Put file to object storage
 		objectName := string(append(ppath[:], path[:]...))	// prefix + path
 
-		var (
-			n int64
-			err error
-		)
+		var n int64
 		n, err = buffer.Seek(0, io.SeekStart)
 
 		n, err = osClient.Put(objectName, buffer, int64(downloadeSize), FileMetadata{
@@ -350,19 +378,21 @@ func Downloader(data chan byte, filelist FileList, osClient FS, prepath string) 
 			Mode:  filelist[index].Mode,
 		})
 		if err != nil {
-			panic(err)
+			return err
 		}
 
 		if buffer.Finalize() != nil {
-			panic("Buffer can't be finalized")
+			return errors.New("Buffer can't be finalized")
 		}
 
 		log.Printf("Successfully uploaded %s of size %d\n", path, n)
 
 		// Remote MD4
 		// TODO: compare computed MD4 with remote MD4
-		rmd4 := make([]byte, 16)
-		GetBytes(data, rmd4)
+		_, err = io.ReadFull(r.conn, rmd4)
+		if err != nil {
+			return err
+		}
 		fmt.Println("Remote MD4:", rmd4)
 
 		//lmd4 := md4.New()
@@ -373,24 +403,52 @@ func Downloader(data chan byte, filelist FileList, osClient FS, prepath string) 
 	}
 }
 
-// a block: [file id + block checksum + '\0']
-func exchangeBlock() {
-	// Here we get a list stores old files
-	// Rolling Checksum & Hash value
-	// Loop until all file are updated, each time handle a file.
-	// Send a empty signature block (no Rolling Checksum & Hash value)
-	// Download the data blocks, and write them into a file
-}
-
-func (conn *SocketConn) FinalPhase() error {
+func (r *Receiver) FinalPhase() error {
 	go func() {
-		ioerror := GetInteger(conn.DemuxIn)
-		log.Println(ioerror)
+		ioerror, err := r.conn.ReadInt()
+		log.Println(ioerror, err)
 	}()
 
-	err := binary.Write(conn.RawConn, binary.LittleEndian, INDEX_END)
+	err := r.conn.WriteInt(INDEX_END)
 	if err != nil {
 		return err
 	}
-	return binary.Write(conn.RawConn, binary.LittleEndian, INDEX_END)
+	return r.conn.WriteInt(INDEX_END)
+}
+
+func (r *Receiver) Run() error {
+	r.SendExclusions()
+	filelist, err := r.GetFileList()
+	r.RequestFiles()
+	r.FinalPhase()
+}
+
+func readLine(conn *Conn) (string, error) {
+	// until \n, then add \0
+	line := new(bytes.Buffer)
+	for {
+		c, err := conn.ReadByte()
+		if err != nil {
+			return "", err
+		}
+
+		if c == '\r' {
+			continue
+		}
+
+		err = line.WriteByte(c)
+		if err != nil {
+			return "", err
+		}
+
+		if c == '\n' {
+			line.WriteByte(0)
+			break
+		}
+
+		if c == 0 {
+			break
+		}
+	}
+	return line.String(), nil
 }
