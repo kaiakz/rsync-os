@@ -33,9 +33,9 @@ func (L FileList) Swap(i, j int) {
 list NEW: only R has.
 list OLD: only L has.
  */
-func (L FileList) Diff(R FileList) (new []int, old []int) {
-	new = make([]int, 0, len(R))
-	old = make([]int, 0, len(L))
+func (L FileList) Diff(R FileList) (newitems []int, olditems []int) {
+	newitems = make([]int, 0, len(R))
+	olditems = make([]int, 0, len(L))
 	i := 0	// index of L
 	j := 0	// index of R
 
@@ -49,17 +49,17 @@ func (L FileList) Diff(R FileList) (new []int, old []int) {
 		switch bytes.Compare(L[i].Path, R[j].Path) {
 		case 0:
 			if L[i].Mtime != R[j].Mtime || L[i].Size != R[j].Size {
-				new = append(new, i)
+				newitems = append(newitems, i)
 			}
 			i++
 			j++
 			break
 		case 1:
-			old = append(old, j)
+			olditems = append(olditems, j)
 			j++
 			break
 		case -1:
-			new = append(new, i)
+			newitems = append(newitems, i)
 			i++
 			break
 		}
@@ -67,10 +67,10 @@ func (L FileList) Diff(R FileList) (new []int, old []int) {
 
 	// Handle remains
 	for ; i < len(L); i++ {
-		old = append(old, i)
+		olditems = append(olditems, i)
 	}
 	for ; j < len(R); j++ {
-		new = append(new, j)
+		newitems = append(newitems, j)
 	}
 
 	return

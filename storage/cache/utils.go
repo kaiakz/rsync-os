@@ -1,9 +1,10 @@
-package fldb
+package cache
 
 import (
 	"fmt"
 	"github.com/golang/protobuf/proto"
 	bolt "go.etcd.io/bbolt"
+	"rsync-os/fldb"
 )
 
 // FIXME
@@ -20,7 +21,7 @@ func IterDBBucket(module string) {
 		c := b.Cursor()
 
 		for k, v := c.First(); k != nil; k, v = c.Next() {
-			var m FInfo
+			var m fldb.FInfo
 			proto.Unmarshal(v, &m)
 			fmt.Println(string(k), m.GetMtime(), m.GetSize())
 		}
