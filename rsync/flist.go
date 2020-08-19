@@ -12,6 +12,58 @@ type FileInfo struct {
 	Mode  os.FileMode
 }
 
+type FileMode uint32
+
+func (m FileMode) IsREG() bool {
+	return (m&S_IFMT)==S_IFREG
+}
+
+func (m FileMode) IsDIR() bool {
+	return (m&S_IFMT)==S_IFDIR
+}
+
+func (m FileMode) IsBLK() bool {
+	return (m&S_IFMT)==S_IFBLK
+}
+
+func (m FileMode) IsLNK() bool {
+	return (m&S_IFMT)==S_IFLNK
+}
+
+func (m FileMode) IsFIFO() bool {
+	return (m&S_IFMT)==S_IFIFO
+}
+
+func (m FileMode) IsSock() bool {
+	return (m&S_IFMT)==S_IFSOCK
+}
+
+// strmode
+func (m FileMode) String() string {
+	chars := []byte("-rwxrwxrwx")
+	switch m & S_IFMT {
+	case S_IFREG:
+		break
+	case S_IFDIR:
+		chars[0] = 'd'
+		break
+	case S_IFLNK:
+		chars[0] = 'l'
+		break
+	case S_IFBLK:
+		chars[0] = 'b'
+		break
+	case S_IFSOCK:
+		chars[0] = 's'
+		break
+	default:
+		chars[0] = '?'
+		break
+	}
+	// TODO: handle permission bits
+	return string(chars)
+}
+
 type FileList []FileInfo
 
 func (L FileList) Len() int {
