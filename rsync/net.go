@@ -5,8 +5,8 @@ import (
 	"io"
 )
 
-type Peer interface {
-	Run()
+type SendReceiver interface {
+	Run() error
 }
 
 // io.ReadWriteCloser

@@ -21,10 +21,10 @@ import (
 3. Receive Files, pass the files to storage
 */
 type Receiver struct {
-	conn *Conn
-	module string
-	path string
-	seed int32
+	conn    *Conn
+	module  string
+	path    string
+	seed    int32
 	storage FS
 }
 
@@ -253,19 +253,19 @@ func (r *Receiver) GetFileList() (FileList, error) {
 	return filelist[:], nil
 }
 
-func (r *Receiver) RequestFiles(filelist FileList, downloadList []int, osClient FS, prepath string) error {
+func (r *Receiver) RequestFiles(remoteList FileList, downloadList []int) error {
 	emptyBlocks := make([]byte, 16) // 4 + 4 + 4 + 4 bytes, all bytes set to 0
 	var err error = nil
 	for _, v := range downloadList {
 		// TODO: Supports more file mode
-		if filelist[v].Mode == 0100644 || filelist[v].Mode == 0100755 {
+		if remoteList[v].Mode == 0100644 || remoteList[v].Mode == 0100755 {
 			err = r.conn.WriteInt(int32(v))
 			if err != nil {
 				log.Println("Failed to send index")
 				return err
 			}
 
-			fmt.Println("Request: ", string(filelist[v].Path), uint32(filelist[v].Mode))
+			fmt.Println("Request: ", string(remoteList[v].Path), uint32(remoteList[v].Mode))
 			_, err := r.conn.Write(emptyBlocks)
 			if err != nil {
 				return err
@@ -291,15 +291,15 @@ func (r *Receiver) RequestFiles(filelist FileList, downloadList []int, osClient 
 	log.Println("Request completed")
 
 	startTime := time.Now()
-	err = r.Downloader(filelist[:], osClient, prepath)
+	err = r.Downloader(remoteList[:])
 	log.Println("Downloaded duration:", time.Since(startTime))
 	return err
 }
 
 // TODO: It is better to update files in goroutine
-func (r *Receiver) Downloader(filelist FileList, osClient FS, prepath string) error {
+func (r *Receiver) Downloader(localList FileList) error {
 
-	ppath := []byte(prepath)
+	ppath := []byte(r.path)
 	rmd4 := make([]byte, 16)
 
 	for {
@@ -307,22 +307,22 @@ func (r *Receiver) Downloader(filelist FileList, osClient FS, prepath string) er
 		if err != nil {
 			return err
 		}
-		if index == INDEX_END {	// -1 means the end of transfer files
+		if index == INDEX_END { // -1 means the end of transfer files
 			return nil
 		}
 		fmt.Println("INDEX:", index)
 
-		count, err := r.conn.ReadInt()     /* block count */
+		count, err := r.conn.ReadInt() /* block count */
 		if err != nil {
 			return err
 		}
 
-		blen, err := r.conn.ReadInt()      /* block length */
+		blen, err := r.conn.ReadInt() /* block length */
 		if err != nil {
 			return err
 		}
 
-		clen, err := r.conn.ReadInt()     /* checksum length */
+		clen, err := r.conn.ReadInt() /* checksum length */
 		if err != nil {
 			return err
 		}
@@ -332,11 +332,11 @@ func (r *Receiver) Downloader(filelist FileList, osClient FS, prepath string) er
 			return err
 		}
 
-		path := filelist[index].Path
-		log.Println("Downloading:", string(path), count, blen, clen, remainder, filelist[index].Size)
+		path := localList[index].Path
+		log.Println("Downloading:", string(path), count, blen, clen, remainder, localList[index].Size)
 
 		// If the file is too big to store in memory, creates a temporary file in the directory 'tmp'
-		buffer := ubuffer.NewBuffer(filelist[index].Size)
+		buffer := ubuffer.NewBuffer(localList[index].Size)
 		downloadeSize := 0
 		bufwriter := bufio.NewWriter(buffer)
 		for {
@@ -351,7 +351,7 @@ func (r *Receiver) Downloader(filelist FileList, osClient FS, prepath string) er
 				return errors.New("Does not support block checksum")
 				// Reference
 			} else {
-				ctx := make([]byte, token)		// FIXME: memory leak?
+				ctx := make([]byte, token) // FIXME: memory leak?
 				_, err = io.ReadFull(r.conn, ctx)
 				if err != nil {
 					return err
@@ -368,14 +368,14 @@ func (r *Receiver) Downloader(filelist FileList, osClient FS, prepath string) er
 			return errors.New("Failed to flush buffer")
 		}
 		// Put file to object storage
-		objectName := string(append(ppath[:], path[:]...))	// prefix + path
+		objectName := string(append(ppath[:], path[:]...)) // prefix + path
 
 		var n int64
 		n, err = buffer.Seek(0, io.SeekStart)
 
-		n, err = osClient.Put(objectName, buffer, int64(downloadeSize), FileMetadata{
-			Mtime: filelist[index].Mtime,
-			Mode:  filelist[index].Mode,
+		n, err = r.storage.Put(objectName, buffer, int64(downloadeSize), FileMetadata{
+			Mtime: localList[index].Mtime,
+			Mode:  localList[index].Mode,
 		})
 		if err != nil {
 			return err
@@ -403,6 +403,21 @@ func (r *Receiver) Downloader(filelist FileList, osClient FS, prepath string) er
 	}
 }
 
+// Clean up local files
+func (r *Receiver) Cleaner(localList FileList, deleteList []int) error {
+	prefix := []byte(r.path)
+	for i := range deleteList {
+		if localList[i].Mode.IsRegular() {
+			name := append(prefix, localList[i].Path...)
+			err := r.storage.Delete(string(name))
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func (r *Receiver) FinalPhase() error {
 	go func() {
 		ioerror, err := r.conn.ReadInt()
@@ -417,10 +432,25 @@ func (r *Receiver) FinalPhase() error {
 }
 
 func (r *Receiver) Run() error {
-	r.SendExclusions()
-	filelist, err := r.GetFileList()
-	r.RequestFiles()
-	r.FinalPhase()
+	rfiles, err := r.GetFileList()
+	if err != nil {
+		return err
+	}
+	lfiles, err := r.storage.List()
+	if err != nil {
+		return err
+	}
+	newfiles, oldfiles := lfiles.Diff(rfiles[:])
+	if err := r.RequestFiles(rfiles[:], newfiles[:]); err != nil {
+		return err
+	}
+	if err := r.Cleaner(lfiles[:], oldfiles[:]); err != nil {
+		return err
+	}
+	if err := r.FinalPhase(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func readLine(conn *Conn) (string, error) {
