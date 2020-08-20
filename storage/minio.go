@@ -1,16 +1,19 @@
 package storage
 
 import (
+	"bytes"
+	"errors"
+	"github.com/golang/protobuf/proto"
 	"github.com/minio/minio-go/v6"
+	bolt "go.etcd.io/bbolt"
 	"io"
 	"log"
 	"os"
-	"path"
+	"path/filepath"
+	"rsync-os/fldb"
 	"rsync-os/rsync"
 	"strconv"
-	"strings"
 )
-
 
 /*
 rsync-os will add addition information for each file that was uploaded to minio
@@ -18,17 +21,22 @@ rsync-os stores the information of a folder in the metadata of an empty file cal
 rsync-os also uses a strange file to represent a soft link
 */
 
-// A bucketName
+// S3 with cache
 type Minio struct {
 	client     *minio.Client
 	bucketName string
+	prefix string
+	/* Cache */
+	cache      *bolt.DB
+	tx *bolt.Tx
+	bucket *bolt.Bucket
 }
 
 //endpoint := "127.0.0.1:9000"
 //accessKeyID := "minioadmin"
 //secretAccessKey := "minioadmin"
 
-func NewMinio(bucket string, endpoint string, accessKeyID string, secretAccessKey string, secure bool) *Minio {
+func NewMinio(bucket string, prefix string, cachePath string, endpoint string, accessKeyID string, secretAccessKey string, secure bool) *Minio {
 	minioClient, err := minio.New(endpoint, accessKeyID, secretAccessKey, false)
 	if err != nil {
 		panic("Failed to init a minio client")
@@ -46,29 +54,40 @@ func NewMinio(bucket string, endpoint string, accessKeyID string, secretAccessKe
 	} else {
 		log.Printf("Successfully created %s\n", bucket)
 	}
+
+	// Initialize cache
+	db, err := bolt.Open(cachePath, 0666, nil)
+	if err != nil {
+		panic("Can't init cache: boltdb")
+	}
+	tx, err := db.Begin(true)
+	if err != nil {
+		panic(err)
+	}
+
+	mod := tx.Bucket([]byte(bucket))
+	// If bucket does not exist, create the bucket
+	if mod == nil {
+		var err error
+		mod, err = tx.CreateBucket([]byte(bucket))
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	return &Minio{
 		client:     minioClient,
 		bucketName: bucket,
+		prefix:     prefix,
+		cache:      db,
+		tx:         tx,
+		bucket:     mod,
 	}
 }
 
-func (m *Minio) SetBucket(bucket string) {
-	m.bucketName = bucket
-}
-
-func (m *Minio) GetBucket() string {
-	return m.bucketName
-}
-
-
-// Upload a file in goroutine
-func (m *Minio) Uploader() {
-
-}
-
 // object can be a regualar file, folder or symlink
-func (m *Minio) Write(objectName string, reader io.Reader, objectSize int64, metadata rsync.FileMetadata) (n int64, err error) {
-	data := make(map[string] string)
+func (m *Minio) Put(fileName string, content io.Reader, fileSize int64, metadata rsync.FileMetadata) (written int64, err error) {
+	data := make(map[string]string)
 	data["mtime"] = strconv.Itoa(int(metadata.Mtime))
 	data["mode"] = strconv.Itoa(int(metadata.Mode))
 
@@ -76,19 +95,29 @@ func (m *Minio) Write(objectName string, reader io.Reader, objectSize int64, met
 	// Folder
 	if metadata.Mode.IsDir() {
 		ctx := new(bytes.Buffer)
-		signName := objectName + "/..."
+		signName := fileName + "/..."
 		// FIXME: How to handle a file named "..." as well ?
-		return m.client.PutObject(m.bucketName, signName, reader, int64(sign.Len()), minio.PutObjectOptions{UserMetadata: data})
+		return m.client.PutObject(m.bucketName, signName, content, int64(sign.Len()), minio.PutObjectOptions{UserMetadata: data})
 	}
 	// TODO: symlink
 	if metadata.Mode & os.ModeSymlink != 0 {
 		ctx := new(bytes.Buffer)
 		// Additional data of symbol link
-		return m.client.PutObject(m.bucketName, objectName, reader, int64(sign.Len()), minio.PutObjectOptions{UserMetadata: data})
+		return m.client.PutObject(m.bucketName, fileName, content, int64(sign.Len()), minio.PutObjectOptions{UserMetadata: data})
 	}
 	*/
-
-	return m.client.PutObject(m.bucketName, objectName, reader, objectSize, minio.PutObjectOptions{UserMetadata: data})
+	value, err := proto.Marshal(&fldb.FInfo{
+		Size:  fileSize,
+		Mtime: metadata.Mtime,
+		Mode:  int32(metadata.Mode),	// FIXME: convert uint32 to int32
+	})
+	if err != nil {
+		return -1, err
+	}
+	if err := m.bucket.Put([]byte(fileName), value); err != nil {
+		return -1, err
+	}
+	return m.client.PutObject(m.bucketName, fileName, content, fileSize, minio.PutObjectOptions{UserMetadata: data})
 }
 
 func (m *Minio) Delete(objectName string) error {
@@ -97,9 +126,10 @@ func (m *Minio) Delete(objectName string) error {
 }
 
 // EXPERIMENTAL
-func (m *Minio) List() rsync.FileList {
-	filelist := make(rsync.FileList, 0, 1024 * 1024)
+func (m *Minio) List() (rsync.FileList, error) {
+	filelist := make(rsync.FileList, 0, 1 << 16)
 
+	/*
 	// Create a done channel to control 'ListObjects' go routine.
 	doneCh := make(chan struct{})
 
@@ -137,17 +167,65 @@ func (m *Minio) List() rsync.FileList {
 			Mode:  os.FileMode(mode),
 		})
 	}
-	return filelist[:]
+	*/
+
+
+	info := &fldb.FInfo{}
+
+	// Add current dir as .
+	workdir := []byte(filepath.Clean(m.prefix))
+	v := m.bucket.Get(workdir)
+	if v == nil {
+		return filelist[:], errors.New("Work Dir's info does not exists")
+	}
+	if err := proto.Unmarshal(v, info); err != nil {
+		return filelist, err
+	}
+	filelist = append(filelist, rsync.FileInfo{
+		Path:  workdir,
+		Size:  info.Size,
+		Mtime: info.Mtime,
+		Mode:  os.FileMode(info.Mode),
+	})
+
+	// Add files in the work dir
+	c := m.bucket.Cursor()
+	prefix := []byte(m.prefix)
+	k, v := c.Seek(prefix)
+	for k != nil && bytes.HasPrefix(k, prefix) {
+		if err := proto.Unmarshal(v, info); err != nil {
+			return filelist, err
+		}
+		filelist = append(filelist, rsync.FileInfo{
+			Path:  k[len(prefix):],
+			Size:  info.Size,
+			Mtime: info.Mtime,
+			Mode:  os.FileMode(info.Mode),
+		})
+		k, v = c.Next()
+	}
+
+	return filelist, nil
 }
 
 func (m *Minio) DeleteAll(prefix []byte, deleteList [][]byte) error {
-	for _, rkey := range deleteList	{
+	for _, rkey := range deleteList {
 		key := string(append(prefix, rkey...))
 		// FIXME: ignore folder & symlink
 		err := m.Delete(key)
 		if err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (m *Minio) Close() error {
+	if err := m.tx.Commit(); err != nil {
+		return err
+	}
+	if err := m.cache.Close(); err != nil {
+		return err
 	}
 	return nil
 }
