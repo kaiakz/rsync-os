@@ -6,7 +6,7 @@ const (
 	RSYNC_EXIT    = "@RSYNCD: EXIT"
 
 	K = 1 << 10
-	M  = 1 << 20
+	M = 1 << 20
 	G = 1 << 30
 
 	INDEX_END       = int32(-1)
@@ -47,4 +47,14 @@ const (
 	FLIST_NAME_SAME = 0x20 /* name is repeat */
 	FLIST_NAME_LONG = 0x40 /* name >255 bytes */
 	FLIST_TIME_SAME = 0x80 /* time is repeat */
+
+	// File type
+	S_IFMT   = 0170000	/* Type of file */
+	S_IFREG  = 0100000 /* Regular file.  */
+	S_IFDIR  = 0040000 /* Directory.  */
+	S_IFLNK  = 0120000 /* Symbolic link.  */
+	S_IFCHR  = 0020000 /* Character device.  */
+	S_IFBLK  = 0060000 /* Block device.  */
+	S_IFIFO  = 0010000 /* FIFO.  */
+	S_IFSOCK = 0140000 /* Socket.  */
 )
