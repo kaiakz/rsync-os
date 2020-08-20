@@ -12,6 +12,7 @@ type FileInfo struct {
 	Mode  os.FileMode
 }
 
+// For unix/linux
 type FileMode uint32
 
 func (m FileMode) IsREG() bool {
@@ -60,7 +61,11 @@ func (m FileMode) String() string {
 		chars[0] = '?'
 		break
 	}
-	// TODO: handle permission bits
+	for i:=0; i < 9; i++ {
+		if m & (1 << i) == 0 {
+			chars[9-i] = '-'
+		}
+	}
 	return string(chars)
 }
 
