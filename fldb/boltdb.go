@@ -15,7 +15,7 @@ type BoltDB struct {
 func Open(path string, module []byte, prepath []byte) *BoltDB {
 	db, err := bolt.Open(path, 0666, nil)
 	if err != nil {
-		panic("Can't init fldb: boltdb")
+		panic("Can't init cache: boltdb")
 	}
 	return &BoltDB{
 		db:      db,
