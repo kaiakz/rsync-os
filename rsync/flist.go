@@ -39,6 +39,43 @@ func (m FileMode) IsSock() bool {
 	return (m&S_IFMT)==S_IFSOCK
 }
 
+// Return only unix permission bits
+func (m FileMode) Perm() FileMode {
+	return m&0777
+}
+
+// Convert to os.FileMode
+func (m FileMode) Convert() os.FileMode {
+	mode := os.FileMode(m & 0777)
+	switch m & S_IFMT {
+	case S_IFREG:
+		// For regular files, none will be set.
+		break
+	case S_IFDIR:
+		mode |= os.ModeDir
+		break
+	case S_IFLNK:
+		mode |= os.ModeSymlink
+		break
+	case S_IFBLK:
+		mode |= os.ModeDevice
+		break
+	case S_IFSOCK:
+		mode |= os.ModeSocket
+		break
+	case S_IFIFO:
+		mode |= os.ModeNamedPipe
+		break
+	case S_IFCHR:
+		mode |= os.ModeCharDevice
+		break
+	default:
+		mode |= os.ModeIrregular
+		break
+	}
+	return mode
+}
+
 // strmode
 func (m FileMode) String() string {
 	chars := []byte("-rwxrwxrwx")
@@ -56,6 +93,12 @@ func (m FileMode) String() string {
 		break
 	case S_IFSOCK:
 		chars[0] = 's'
+		break
+	case S_IFIFO:
+		chars[0] = 'p'
+		break
+	case S_IFCHR:
+		chars[0] = 'c'
 		break
 	default:
 		chars[0] = '?'
