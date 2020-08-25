@@ -13,6 +13,6 @@ type FileMetadata struct {
 type FS interface {
 	Put(fileName string, content io.Reader, fileSize int64, metadata FileMetadata) (written int64, err error)
 	//Get(fileName string, metadata FileMetadata)
-	Delete(fileName string) error
+	Delete(fileName string, mode FileMode) error
 	List() (FileList, error)
 }

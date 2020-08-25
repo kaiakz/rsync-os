@@ -9,7 +9,7 @@ type FileInfo struct {
 	Path  []byte
 	Size  int64
 	Mtime int32
-	Mode  os.FileMode
+	Mode  FileMode
 }
 
 // For unix/linux
