@@ -8,11 +8,12 @@ import (
 	bolt "go.etcd.io/bbolt"
 	"io"
 	"log"
-	"os"
+	"path"
 	"path/filepath"
 	"rsync-os/fldb"
 	"rsync-os/rsync"
 	"strconv"
+	"strings"
 )
 
 /*
@@ -36,7 +37,7 @@ type Minio struct {
 //accessKeyID := "minioadmin"
 //secretAccessKey := "minioadmin"
 
-func NewMinio(bucket string, prefix string, cachePath string, endpoint string, accessKeyID string, secretAccessKey string, secure bool) *Minio {
+func NewMinio(bucket string, prefix string, cachePath string, endpoint string, accessKeyID string, secretAccessKey string, secure bool) (*Minio, error) {
 	minioClient, err := minio.New(endpoint, accessKeyID, secretAccessKey, false)
 	if err != nil {
 		panic("Failed to init a minio client")
@@ -82,7 +83,7 @@ func NewMinio(bucket string, prefix string, cachePath string, endpoint string, a
 		cache:      db,
 		tx:         tx,
 		bucket:     mod,
-	}
+	}, nil
 }
 
 // object can be a regualar file, folder or symlink
@@ -114,22 +115,68 @@ func (m *Minio) Put(fileName string, content io.Reader, fileSize int64, metadata
 	if err != nil {
 		return -1, err
 	}
-	if err := m.bucket.Put([]byte(fileName), value); err != nil {
+	fpath := filepath.Join(m.prefix, fileName)
+	if err := m.bucket.Put([]byte(fpath), value); err != nil {
 		return -1, err
 	}
-	return m.client.PutObject(m.bucketName, fileName, content, fileSize, minio.PutObjectOptions{UserMetadata: data})
+	return m.client.PutObject(m.bucketName, fpath, content, fileSize, minio.PutObjectOptions{UserMetadata: data})
 }
 
-func (m *Minio) Delete(objectName string) error {
+func (m *Minio) Delete(fileName string, mode rsync.FileMode) error {
 	// TODO: How to delete a folder
-	return m.client.RemoveObject(m.bucketName, objectName)
+	if !mode.IsREG() {
+		return nil
+	}
+	return m.client.RemoveObject(m.bucketName, fileName)
 }
 
 // EXPERIMENTAL
 func (m *Minio) List() (rsync.FileList, error) {
 	filelist := make(rsync.FileList, 0, 1 << 16)
 
-	/*
+	// We don't list all files directly
+
+	info := &fldb.FInfo{}
+
+	// Add current dir as .
+	workdir := []byte(filepath.Clean(m.prefix))		// If a empty string, we get "."
+	v := m.bucket.Get(workdir)
+	if v == nil {
+		return filelist[:], errors.New("Work Dir's info does not exists")
+	}
+	if err := proto.Unmarshal(v, info); err != nil {
+		return filelist, err
+	}
+	filelist = append(filelist, rsync.FileInfo{
+		Path:  []byte("."),
+		Size:  info.Size,
+		Mtime: info.Mtime,
+		Mode:  rsync.FileMode(info.Mode),
+	})
+
+	// Add files in the work dir
+	c := m.bucket.Cursor()
+	prefix := []byte(m.prefix)
+	k, v := c.Seek(prefix)
+	for k != nil && bytes.HasPrefix(k, prefix) {
+		if err := proto.Unmarshal(v, info); err != nil {
+			return filelist, err
+		}
+		filelist = append(filelist, rsync.FileInfo{
+			Path:  k[len(prefix):],		// ignore prefix
+			Size:  info.Size,
+			Mtime: info.Mtime,
+			Mode:  rsync.FileMode(info.Mode),
+		})
+		k, v = c.Next()
+	}
+
+	return filelist, nil
+}
+
+func (m *Minio) ListObj() (rsync.FileList, error) {
+	filelist := make(rsync.FileList, 0, 1 << 16)
+
 	// Create a done channel to control 'ListObjects' go routine.
 	doneCh := make(chan struct{})
 
@@ -141,7 +188,7 @@ func (m *Minio) List() (rsync.FileList, error) {
 	for object := range objectCh {
 		if object.Err != nil {
 			log.Println(object.Err)
-			return nil
+			return filelist, object.Err
 		}
 
 		// FIXME: Handle folder
@@ -164,47 +211,9 @@ func (m *Minio) List() (rsync.FileList, error) {
 			Path:  []byte(objectName),
 			Size:  object.Size,
 			Mtime: int32(mtime),
-			Mode:  os.FileMode(mode),
+			Mode:  rsync.FileMode(mode),
 		})
 	}
-	*/
-
-
-	info := &fldb.FInfo{}
-
-	// Add current dir as .
-	workdir := []byte(filepath.Clean(m.prefix))
-	v := m.bucket.Get(workdir)
-	if v == nil {
-		return filelist[:], errors.New("Work Dir's info does not exists")
-	}
-	if err := proto.Unmarshal(v, info); err != nil {
-		return filelist, err
-	}
-	filelist = append(filelist, rsync.FileInfo{
-		Path:  workdir,
-		Size:  info.Size,
-		Mtime: info.Mtime,
-		Mode:  os.FileMode(info.Mode),
-	})
-
-	// Add files in the work dir
-	c := m.bucket.Cursor()
-	prefix := []byte(m.prefix)
-	k, v := c.Seek(prefix)
-	for k != nil && bytes.HasPrefix(k, prefix) {
-		if err := proto.Unmarshal(v, info); err != nil {
-			return filelist, err
-		}
-		filelist = append(filelist, rsync.FileInfo{
-			Path:  k[len(prefix):],
-			Size:  info.Size,
-			Mtime: info.Mtime,
-			Mode:  os.FileMode(info.Mode),
-		})
-		k, v = c.Next()
-	}
-
 	return filelist, nil
 }
 
@@ -212,7 +221,7 @@ func (m *Minio) DeleteAll(prefix []byte, deleteList [][]byte) error {
 	for _, rkey := range deleteList {
 		key := string(append(prefix, rkey...))
 		// FIXME: ignore folder & symlink
-		err := m.Delete(key)
+		err := m.Delete(key, 0)
 		if err != nil {
 			return err
 		}
