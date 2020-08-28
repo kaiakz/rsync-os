@@ -7,21 +7,21 @@ import (
 	"log"
 )
 
-type dMuxReader struct {
+type MuxReader struct {
 	in     io.ReadCloser
 	remain uint32 // Default value: 0
 	header []byte // Size: 4 bytes
 }
 
-func NewdMuxReader(reader io.ReadCloser) *dMuxReader {
-	return &dMuxReader{
+func NewMuxReader(reader io.ReadCloser) *MuxReader {
+	return &MuxReader{
 		in:     reader,
 		remain: 0,
 		header: make([]byte, 4),
 	}
 }
 
-func (r *dMuxReader) Read(p []byte) (n int, err error) {
+func (r *MuxReader) Read(p []byte) (n int, err error) {
 	if r.remain == 0 {
 		err := r.readHeader()
 		if err != nil {
@@ -37,10 +37,10 @@ func (r *dMuxReader) Read(p []byte) (n int, err error) {
 	return
 }
 
-func (r *dMuxReader) readHeader() error {
+func (r *MuxReader) readHeader() error {
 	for {
 		// Read header
-		if _, err := io.ReadFull(r.in, r.header[:4]); err != nil {
+		if _, err := io.ReadFull(r.in, r.header); err != nil {
 			return err
 		}
 		tag := r.header[3]                                        // Little Endian
@@ -62,7 +62,7 @@ func (r *dMuxReader) readHeader() error {
 	}
 }
 
-func (r *dMuxReader) Close() error {
+func (r *MuxReader) Close() error {
 	return r.in.Close()
 }
 

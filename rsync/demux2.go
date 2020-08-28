@@ -21,14 +21,14 @@ import (
 //The only data not using this envelope are the initial handshake between client and
 //server
 
-type MuxReader struct {
+type MuxReaderV0 struct {
 	in      io.ReadCloser
 	Data    chan byte
 	closeCh chan byte
 }
 
-func NewMuxReader(reader io.ReadCloser) *MuxReader {
-	mr := &MuxReader{
+func NewMuxReaderV0(reader io.ReadCloser) *MuxReaderV0 {
+	mr := &MuxReaderV0{
 		in:      reader,
 		Data:    make(chan byte, 16 * M),
 		closeCh: make(chan byte),
@@ -47,11 +47,9 @@ func NewMuxReader(reader io.ReadCloser) *MuxReader {
 				return
 			default:
 				// read the multipex data & put them to channel
-				_, err := reader.Read(header)
+				_, err := io.ReadFull(reader, header)
 				if err != nil {
-					// panic("Multiplex: wire protocol error")
-					log.Println("Multiplex: wire protocol error")
-					return
+					panic("Multiplex: wire protocol error")
 				}
 
 				tag := header[3]                                        // Little Endian
@@ -66,7 +64,8 @@ func NewMuxReader(reader io.ReadCloser) *MuxReader {
 					}
 
 					body := bytespool[:size]
-					_, err := reader.Read(body)
+					_, err := io.ReadFull(reader, body)
+					//_, err := reader.Read(body)
 
 					// FIXME: Never return EOF
 					if err != nil { // The connection was closed by server
@@ -79,7 +78,11 @@ func NewMuxReader(reader io.ReadCloser) *MuxReader {
 
 				} else { // out-of-band data
 					//otag := tag - 7
-					panic("Error: out-of-band")
+					msg := make([]byte, size)
+					if _, err := reader.Read(msg); err != nil {
+						panic("Failed to read out-of-band data")
+					}
+					panic("out-of-band data: " + string(msg))
 				}
 			}
 		}
@@ -87,15 +90,15 @@ func NewMuxReader(reader io.ReadCloser) *MuxReader {
 	return mr
 }
 
-// Never return error
-func (r *MuxReader) Read(p []byte) (n int, err error) {
+// FIXME: Never return error
+func (r *MuxReaderV0) Read(p []byte) (n int, err error) {
 	for i, _ := range p {
 		p[i] = <- r.Data
 	}
 	return len(p), nil
 }
 
-func (r *MuxReader) Close() error {
+func (r *MuxReaderV0) Close() error {
 	r.closeCh <- 0	// close the channel Data & exit the demux goroutine
 	return r.in.Close()
 }
