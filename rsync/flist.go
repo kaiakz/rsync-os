@@ -15,6 +15,31 @@ type FileInfo struct {
 // For unix/linux
 type FileMode uint32
 
+// reference: os/types.go
+func NewFileMode(mode os.FileMode) FileMode {
+	m := FileMode(mode & 0777)
+	// TODO: supports symlink
+	if mode.IsRegular() {
+		return m | S_IFREG
+	}
+
+	types := map[uint32]FileMode {
+		0: S_IFDIR,
+		4: S_IFLNK,
+		5: S_IFBLK,
+		6: S_IFIFO,
+		7: S_IFSOCK,
+		10: S_IFCHR,
+	}
+	for i, t := range types {
+		if m&(1<<uint(32-1-i)) != 0 {
+			m |= t
+		}
+	}
+
+	return m
+}
+
 func (m FileMode) IsREG() bool {
 	return (m&S_IFMT)==S_IFREG
 }
@@ -35,7 +60,7 @@ func (m FileMode) IsFIFO() bool {
 	return (m&S_IFMT)==S_IFIFO
 }
 
-func (m FileMode) IsSock() bool {
+func (m FileMode) IsSOCK() bool {
 	return (m&S_IFMT)==S_IFSOCK
 }
 
@@ -149,17 +174,17 @@ func (L FileList) Diff(R FileList) (newitems []int, olditems []int) {
 		switch bytes.Compare(L[i].Path, R[j].Path) {
 		case 0:
 			if L[i].Mtime != R[j].Mtime || L[i].Size != R[j].Size {
-				newitems = append(newitems, i)
+				newitems = append(newitems, j)
 			}
 			i++
 			j++
 			break
 		case 1:
-			olditems = append(olditems, j)
+			newitems = append(newitems, j)
 			j++
 			break
 		case -1:
-			newitems = append(newitems, i)
+			olditems = append(olditems, i)
 			i++
 			break
 		}

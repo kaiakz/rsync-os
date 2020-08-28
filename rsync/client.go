@@ -15,24 +15,19 @@ import (
 3. construct a Receiver or a Sender, then excute it.
 */
 
-type Client struct {
-	runner SendReceiver
-	lver int
-	rver int
-	options map[string]string
-}
-
 // TODO: passes more arguments: cmd
 // Connect to rsync daemon
-func SocketClient(storage FS, address string, module string, path string) (*Client, error) {
+func SocketClient(storage FS, address string, module string, path string, options map[string]string) (SendReceiver, error) {
 	skt, err := net.Dial("tcp", address)
 	if err != nil {
 		return nil, err
 	}
 
-	conn := new(Conn)
-	conn.reader = skt
-	conn.writer = skt
+	conn := &Conn{
+		writer:    skt,
+		reader:    skt,
+		bytespool:	make([]byte, 8),
+	}
 
 	/* HandShake by socket */
 	// send my version
@@ -94,6 +89,8 @@ func SocketClient(storage FS, address string, module string, path string) (*Clie
 	log.Println("SEED", seed)
 
 	// HandShake OK
+	log.Println("Handshake completed")
+
 	// Begin to demux
 	conn.reader = NewMuxReader(conn.reader)
 
@@ -103,28 +100,57 @@ func SocketClient(storage FS, address string, module string, path string) (*Clie
 		return nil, err
 	}
 
-	runner := &Receiver{
-		conn:   conn,
-		module: module,
-		path:   path,
-		seed:   seed,
-		storage: storage,
-	}
+	// TODO: Sender
 
-	return &Client{
-		runner: runner,
-		lver:    0,
-		rver:    0,
-		options: nil,
+	return &Receiver{
+		conn:    conn,
+		module:  module,
+		path:    path,
+		seed:    seed,
+		storage: storage,
 	}, nil
 }
 
 // Connect to sshd, and start a rsync server on remote
-func SshClient() {
+func SshClient(storage FS, address string, module string, path string, options map[string]string) (SendReceiver, error) {
+	// TODO: build args
 
-}
+	ssh, err := NewSSH(address, "", "", "rsync --server --sender -l -p -r -t")
+	if err != nil {
+		return nil, err
+	}
+	conn := &Conn{
+		writer:    ssh,
+		reader:    ssh,
+		bytespool:	make([]byte, 8),
+	}
 
-func (c *Client) Excute() error {
-	return c.runner.Run()
+	// Handshake
+	lver, err := conn.ReadInt()
+	if err != nil {
+		return nil, err
+	}
+
+	rver, err := conn.ReadInt()
+	if err != nil {
+		return nil, err
+	}
+
+	seed, err := conn.ReadInt()
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: Sender
+
+	return &Receiver{
+		conn:    conn,
+		module:  module,
+		path:    path,
+		seed:    seed,
+		localVersion: lver,
+		remoteVersion: rver,
+		storage: storage,
+	}, nil
 }
 

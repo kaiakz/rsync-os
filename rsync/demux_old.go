@@ -65,7 +65,6 @@ func NewMuxReaderV0(reader io.ReadCloser) *MuxReaderV0 {
 
 					body := bytespool[:size]
 					_, err := io.ReadFull(reader, body)
-					//_, err := reader.Read(body)
 
 					// FIXME: Never return EOF
 					if err != nil { // The connection was closed by server
@@ -79,7 +78,7 @@ func NewMuxReaderV0(reader io.ReadCloser) *MuxReaderV0 {
 				} else { // out-of-band data
 					//otag := tag - 7
 					msg := make([]byte, size)
-					if _, err := reader.Read(msg); err != nil {
+					if _, err := io.ReadFull(reader, msg); err != nil {
 						panic("Failed to read out-of-band data")
 					}
 					panic("out-of-band data: " + string(msg))

@@ -2,15 +2,10 @@ package rsync
 
 import (
 	"encoding/binary"
+	"errors"
 	"io"
-	"os"
-
-	//"io/ioutil"
 	"log"
-	"net"
 )
-
-//channel: read & write
 
 //Multiplexing
 //Most rsync transmissions are wrapped in a multiplexing envelope protocol.  It is
@@ -27,99 +22,62 @@ import (
 //The only data not using this envelope are the initial handshake between client and
 //server
 
-// Goroutine: Demultiplex the package, and push them to channel
-// data: Buffered Channel
-// FIXME: How to close the channel & goroutine
-func DeMuxChan(conn net.Conn, data chan byte) {
-	// conn read the multipex data & put them to channel
-	header := make([]byte, 4)	// Header size: 4 bytes
-	var dsize uint32 = 1 << 16	// Default size: 65536
-	bytespool := make([]byte, dsize)
+type MuxReader struct {
+	in     io.ReadCloser
+	remain uint32 // Default value: 0
+	header []byte // Size: 4 bytes
+}
 
-	for {
-		n, err := ReadExact(conn, header)
-		if n != 4 || err != nil {
-			// panic("Mulitplex: Check your wired protocol")
-			log.Println("Mulitplex: Check your wire protocol")
-			return
+func NewMuxReader(reader io.ReadCloser) *MuxReader {
+	return &MuxReader{
+		in:     reader,
+		remain: 0,
+		header: make([]byte, 4),
+	}
+}
+
+func (r *MuxReader) Read(p []byte) (n int, err error) {
+	if r.remain == 0 {
+		err := r.readHeader()
+		if err != nil {
+			return 0, err
 		}
+	}
+	rlen := uint32(len(p))
+	if rlen > r.remain {	// Min(len(p), remain)
+		rlen = r.remain
+	}
+	n, err = r.in.Read(p[:rlen])
+	r.remain = r.remain - uint32(n)
+	return
+}
 
-		tag := header[3]                                        // Little Endian
-		size := (binary.LittleEndian.Uint32(header) & 0xffffff) // TODO: zero?
+func (r *MuxReader) readHeader() error {
+	for {
+		// Read header
+		if _, err := io.ReadFull(r.in, r.header); err != nil {
+			return err
+		}
+		tag := r.header[3]                                        // Little Endian
+		size := (binary.LittleEndian.Uint32(r.header) & 0xffffff) // TODO: zero?
 
 		log.Printf("<DEMUX> tag %d size %d\n", tag, size)
 
 		if tag == (MUX_BASE + MSG_DATA) { // MUX_BASE + MSG_DATA
-			if size > dsize {
-				bytespool = make([]byte, size)
-				dsize = size
-			}
-
-			body := bytespool[:size]
-
-			_, err := ReadExact(conn, body)
-
-			// FIXME: Never return EOF
-			if err == io.EOF { // Finish
-				panic("EOF")
-			}
-
-			for _, b := range body {
-				data <- b
-			}
-
+			r.remain = size
+			return nil
 		} else { // out-of-band data
-			//otag := tag - 7
-			panic("Error")
+			// otag := tag - 7
+			msg := make([]byte, size)
+			if _, err := io.ReadFull(r.in, msg); err != nil {
+				return err
+			}
+			return errors.New(string(msg))
 		}
 	}
 }
 
-// Blocking: copy len(b) bytes from channel to b
-func GetBytes(data chan byte, b []byte) {
-	for i := 0; i < len(b); i++ {
-		b[i] = <-data
-	}
-}
-
-func GetShort(data chan byte) int16 {
-	val := make([]byte, 2)
-	GetBytes(data, val)
-	return int16(binary.LittleEndian.Uint16(val))
-}
-
-func GetByte(data chan byte) byte {
-	return <-data
-}
-
-func GetUint8(data chan byte) uint8 {
-	return uint8(<-data)
-}
-
-func GetInteger(data chan byte) int32 {
-	val := make([]byte, 4)
-	GetBytes(data, val)
-	return int32(binary.LittleEndian.Uint32(val))
-}
-
-func GetFileMode(data chan byte) os.FileMode {
-	val := make([]byte, 4)
-	GetBytes(data, val)
-	return os.FileMode(binary.LittleEndian.Uint32(val))
-}
-
-func GetLong(data chan byte) int64 {
-	val := make([]byte, 8)
-	GetBytes(data, val)
-	return int64(binary.LittleEndian.Uint64(val))
-}
-
-func GetVarint(data chan byte) int64 {
-	sval := GetInteger(data)
-	if sval != -1 {
-		return int64(sval)
-	}
-
-	return GetLong(data)
+func (r *MuxReader) Close() error {
+	return r.in.Close()
 }
 

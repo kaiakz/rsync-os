@@ -4,7 +4,7 @@
 // 	protoc        v3.12.0
 // source: finfo.proto
 
-package fldb
+package cache
 
 import (
 	proto "github.com/golang/protobuf/proto"
