@@ -181,8 +181,6 @@ func (r *Receiver) Generator(remoteList FileList, downloadList []int, symlinks m
 
 	for _, v := range downloadList {
 		if remoteList[v].Mode.IsREG() {
-			fmt.Println("Want:", string(remoteList[v].Path))
-
 			if err := r.conn.WriteInt(int32(v)); err != nil {
 				log.Println("Failed to send index")
 				return err

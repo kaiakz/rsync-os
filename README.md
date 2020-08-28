@@ -5,29 +5,19 @@
 
 ## Usage
 ### minio
-1. install & run minio, you need to configure the `config.yaml`.
+1. install & run minio, you need to configure the `config.toml`.
 2. `go build`
 3. `./rsync-os rsync://[USER@]HOST[:PORT]/SRC minio`, for example, `./rsync-os rsync://mirrors.tuna.tsinghua.edu.cn/ubuntu minio`
 
 ## Roadmap
 ### Client
 #### Rsync wire protocol 27:
-- [x] Parses rsync://
-- [x] Connects to rsync server
-- [x] Handshake
-- [x] Sends argument list
-- [x] Fetches the file list
-- [x] Requests & download files
+- [x] Connect to rsync daemon by rsync://: Handshake, Fetches the file list, Requests & download files
 - [ ] Handles error
-#### File List Caching
-- [x] BoltDB backend
-- [ ] Redis backend
-- [x] Diff 
-- [x] Update
 #### Storage backend
-- [x] Minio: supports regular files
-- [ ] Minio: supports folder & symlink
-- [ ] FS
+- [x] Minio: supports regular files, supports folder & symlink
+- [x] Minio: caches file list in boltdb
+- [ ] Local
 #### Other
 - [x] CLI
 
@@ -81,9 +71,9 @@ Unlike rsync, rsync-os reimplements this part: It just does multiplexing & de-mu
 # Reference
 * [rsync](https://rsync.samba.org/)
 * [openrsync](https://github.com/openbsd/src/tree/master/usr.bin/rsync), a BSD-liscesed rsync
-* [rync-huai](https://github.com/tuna/rsync), a modified version rsync by Tsinghua University TUNA Association
+* [rsync-huai](https://github.com/tuna/rsync), a modified version rsync by Tsinghua University TUNA Association
 * [rsyn](https://github.com/sourcefrog/rsyn), wire-compaible rsync in Rust
-* https://github.com/gilbertchen/acrosync-library
+* [acrosync-library](https://github.com/gilbertchen/acrosync-library)
 * https://rsync.samba.org/resources.html
 * https://github.com/boundary/wireshark/blob/master/epan/dissectors/packet-rsync.c
 * https://tools.ietf.org/html/rfc5781
