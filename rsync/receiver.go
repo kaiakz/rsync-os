@@ -372,9 +372,9 @@ func (r *Receiver) Run() error {
 	if err != nil {
 		return err
 	}
-	for _, v := range lfiles {
-		fmt.Println("FUCK", string(v.Path), v.Mode, v.Mtime)
-	}
+	//for _, v := range lfiles {
+	//	fmt.Println("Local File:", string(v.Path), v.Mode, v.Mtime)
+	//}
 
 	rfiles, symlinks, err := r.GetFileList()
 	if err != nil {
@@ -406,32 +406,3 @@ func (r *Receiver) Run() error {
 	return nil
 }
 
-func readLine(conn *Conn) (string, error) {
-	// until \n, then add \0
-	line := new(bytes.Buffer)
-	for {
-		c, err := conn.ReadByte()
-		if err != nil {
-			return "", err
-		}
-
-		if c == '\r' {
-			continue
-		}
-
-		err = line.WriteByte(c)
-		if err != nil {
-			return "", err
-		}
-
-		if c == '\n' {
-			line.WriteByte(0)
-			break
-		}
-
-		if c == 0 {
-			break
-		}
-	}
-	return line.String(), nil
-}

@@ -98,6 +98,7 @@ func SplitURI(uri string) (string, string, string, error) {
 
 }
 
+// The path always has a trailing slash appended
 func TrimPrepath(prepath string) string {
 	//pre-path shouldn't use "/" as prefix, and must have a "/" suffix
 	//pre-path can be: "xx", "xx/", "/xx", "/xx/", "", "/"

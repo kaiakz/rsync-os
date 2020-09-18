@@ -1,6 +1,7 @@
 package rsync
 
 import (
+	"bytes"
 	"encoding/binary"
 	"io"
 )
@@ -95,4 +96,34 @@ func (conn *Conn) Close() error {
 	_ = conn.writer.Close()
 	_ = conn.reader.Close()
 	return nil
+}
+
+func readLine(conn *Conn) (string, error) {
+	// until \n, then add \0
+	line := new(bytes.Buffer)
+	for {
+		c, err := conn.ReadByte()
+		if err != nil {
+			return "", err
+		}
+
+		if c == '\r' {
+			continue
+		}
+
+		err = line.WriteByte(c)
+		if err != nil {
+			return "", err
+		}
+
+		if c == '\n' {
+			line.WriteByte(0)
+			break
+		}
+
+		if c == 0 {
+			break
+		}
+	}
+	return line.String(), nil
 }
