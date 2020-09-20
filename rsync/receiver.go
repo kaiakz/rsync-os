@@ -38,7 +38,7 @@ func (r *Receiver) StartMuxIn() {
 
 func (r *Receiver) SendExclusions() error {
 	// Send exclusion
-	return r.conn.WriteInt(EMPTY_EXCLUSION)
+	return r.conn.WriteInt(EXCLUSION_END)
 }
 
 // Return a filelist from remote

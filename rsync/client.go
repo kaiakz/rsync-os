@@ -95,7 +95,7 @@ func SocketClient(storage FS, address string, module string, path string, option
 	conn.reader = NewMuxReader(conn.reader)
 
 	// As a client, we need to send filter list
-	err = conn.WriteInt(EMPTY_EXCLUSION)
+	err = conn.WriteInt(EXCLUSION_END)
 	if err != nil {
 		return nil, err
 	}

@@ -9,11 +9,12 @@ const (
 	M = 1 << 20
 	G = 1 << 30
 
-	INDEX_END       = int32(-1)
-	EMPTY_EXCLUSION = int32(0)
-	END1            = '\n'
-	END2            = '\x00'
-	PHASE_END       = int32(-1)
+	MAXPATHLEN    = 1024
+	INDEX_END     = int32(-1)
+	EXCLUSION_END = int32(0)
+	END1          = '\n'
+	END2          = '\x00'
+	PHASE_END     = int32(-1)
 
 	// ARGUMENTS
 	ARG_SERVER       = "--server"
@@ -49,7 +50,7 @@ const (
 	FLIST_TIME_SAME = 0x80 /* time is repeat */
 
 	// File type
-	S_IFMT   = 0170000	/* Type of file */
+	S_IFMT   = 0170000 /* Type of file */
 	S_IFREG  = 0100000 /* Regular file.  */
 	S_IFDIR  = 0040000 /* Directory.  */
 	S_IFLNK  = 0120000 /* Symbolic link.  */
