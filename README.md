@@ -1,10 +1,17 @@
 # RSYNC-OS
-## A rsync-compatible tool for object storage
+## A port of rsync written in Go, with object storage support
+
+# Introduction
+rsync-os is a port of rsync written in Go. Its goal is to be a modern rsync-compatible tool with features like:
+* Supports file storage and object storage
+* Uses a subset of rsync wire protocol to stop block efficient transfer (For sender and receiver)
+* Provides APIs
+* Safe 
 
 ![client](https://raw.githubusercontent.com/kaiakz/rsync-os/master/docs/client.jpg)
 
 ## Usage
-### minio
+### Use minio as backend
 1. install & run minio, you need to configure the `config.toml`.
 2. `go build`
 3. `./rsync-os rsync://[USER@]HOST[:PORT]/SRC minio`, for example, `./rsync-os rsync://mirrors.tuna.tsinghua.edu.cn/ubuntu minio`
@@ -72,6 +79,7 @@ Unlike rsync, rsync-os reimplements this part: It just does multiplexing & de-mu
 * [rsync](https://rsync.samba.org/)
 * [openrsync](https://github.com/openbsd/src/tree/master/usr.bin/rsync), a BSD-liscesed rsync
 * [rsync-huai](https://github.com/tuna/rsync), a modified version rsync by Tsinghua University TUNA Association
+* [yajsync](https://github.com/perlundq/yajsync), a port of rsync written in Java
 * [rsyn](https://github.com/sourcefrog/rsyn), wire-compaible rsync in Rust
 * [acrosync-library](https://github.com/gilbertchen/acrosync-library)
 * https://rsync.samba.org/resources.html
