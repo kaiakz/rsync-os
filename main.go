@@ -47,7 +47,7 @@ func ClientS3(src string, dest string) {
 	if err != nil {
 		panic("rsync client fails to initialize")
 	}
-	if err := client.Run(); err != nil {
+	if err := client.Sync(); err != nil {
 		panic(err)
 	}
 

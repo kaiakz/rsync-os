@@ -7,7 +7,7 @@ import (
 )
 
 type SendReceiver interface {
-	Run() error
+	Sync() error
 }
 
 // io.ReadWriteCloser

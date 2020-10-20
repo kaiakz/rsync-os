@@ -22,8 +22,8 @@ type Receiver struct {
 	module  string
 	path    string
 	seed    int32
-	localVersion int32
-	remoteVersion int32
+	lVer    int32
+	rVer    int32
 	storage FS
 }
 
@@ -42,7 +42,7 @@ func (r *Receiver) SendExclusions() error {
 }
 
 // Return a filelist from remote
-func (r *Receiver) GetFileList() (FileList, map[int][]byte, error) {
+func (r *Receiver) RecvFileList() (FileList, map[int][]byte, error) {
 	filelist := make(FileList, 0, 1 *M)
 	symlinks := make(map[int][]byte)
 	for {
@@ -363,7 +363,7 @@ func (r *Receiver) FinalPhase() error {
 	return r.conn.WriteInt(INDEX_END)
 }
 
-func (r *Receiver) Run() error {
+func (r *Receiver) Sync() error {
 	defer func() {
 		log.Println("Task completed", r.conn.Close())	// TODO: How to handle errors from Close
 	}()
@@ -376,7 +376,7 @@ func (r *Receiver) Run() error {
 	//	fmt.Println("Local File:", string(v.Path), v.Mode, v.Mtime)
 	//}
 
-	rfiles, symlinks, err := r.GetFileList()
+	rfiles, symlinks, err := r.RecvFileList()
 	if err != nil {
 		return err
 	}

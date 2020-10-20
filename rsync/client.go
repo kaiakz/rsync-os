@@ -26,7 +26,7 @@ func SocketClient(storage FS, address string, module string, path string, option
 	conn := &Conn{
 		writer:    skt,
 		reader:    skt,
-		bytespool:	make([]byte, 8),
+		bytespool: make([]byte, 8),
 	}
 
 	/* HandShake by socket */
@@ -122,7 +122,7 @@ func SshClient(storage FS, address string, module string, path string, options m
 	conn := &Conn{
 		writer:    ssh,
 		reader:    ssh,
-		bytespool:	make([]byte, 8),
+		bytespool: make([]byte, 8),
 	}
 
 	// Handshake
@@ -148,9 +148,8 @@ func SshClient(storage FS, address string, module string, path string, options m
 		module:  module,
 		path:    path,
 		seed:    seed,
-		localVersion: lver,
-		remoteVersion: rver,
+		lVer:    lver,
+		rVer:    rver,
 		storage: storage,
 	}, nil
 }
-
