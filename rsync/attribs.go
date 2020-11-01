@@ -1,42 +1,43 @@
 package rsync
 
 type Attribs struct {
-	sender     bool // --sender
-	server     bool // --server
-	recursive  bool // -r
-	dryRun     bool // -n
-	hasModTime bool // -t
-	hasPerms   bool // -p
-	hasLinks   bool // -l
-	hasGID     bool // -g
-	hasUID     bool // -u
+	Sender     bool // --sender
+	Server     bool // --server
+	Recursive  bool // -r
+	DryRun     bool // -n
+	HasModTime bool // -t
+	HasPerms   bool // -p
+	HasLinks   bool // -l
+	HasGID     bool // -g
+	HasUID     bool // -u
+	//compress 	bool // -z
 }
 
 func (a *Attribs) Marshal() []byte {
 	//"--server\n--sender\n-l\n-p\n-r\n-t\n.\n"
 	args := make([]byte, 0, 64)
-	if a.server {
+	if a.Server {
 		args = append(args, []byte("--server\n")...)
 	}
-	if a.sender {
+	if a.Sender {
 		args = append(args, []byte("--sender\n")...)
 	}
-	if a.recursive {
+	if a.Recursive {
 		args = append(args, []byte("-r\n")...)
 	}
-	if a.hasModTime {
+	if a.HasModTime {
 		args = append(args, []byte("-t\n")...)
 	}
-	if a.hasLinks {
+	if a.HasLinks {
 		args = append(args, []byte("-l\n")...)
 	}
-	if a.hasPerms {
+	if a.HasPerms {
 		args = append(args, []byte("-p\n")...)
 	}
-	if a.hasGID {
+	if a.HasGID {
 		args = append(args, []byte("-g\n")...)
 	}
-	if a.hasUID {
+	if a.HasUID {
 		args = append(args, []byte("-u\n")...)
 	}
 	return args

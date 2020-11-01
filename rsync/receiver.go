@@ -51,7 +51,7 @@ func (r *Receiver) RecvFileList() (FileList, map[int][]byte, error) {
 			return filelist, symlinks, err
 		}
 
-		if flags == 0 {
+		if flags == FLIST_END {
 			break
 		}
 		//fmt.Printf("[%d]\n", flags)
@@ -219,13 +219,13 @@ func (r *Receiver) Generator(remoteList FileList, downloadList []int, symlinks m
 	log.Println("Request completed")
 
 	startTime := time.Now()
-	err := r.Downloader(remoteList[:])
+	err := r.FileDownloader(remoteList[:])
 	log.Println("Downloaded duration:", time.Since(startTime))
 	return err
 }
 
 // TODO: It is better to update files in goroutine
-func (r *Receiver) Downloader(localList FileList) error {
+func (r *Receiver) FileDownloader(localList FileList) error {
 
 	rmd4 := make([]byte, 16)
 
@@ -336,7 +336,7 @@ func (r *Receiver) Downloader(localList FileList) error {
 }
 
 // Clean up local files
-func (r *Receiver) Cleaner(localList FileList, deleteList []int) error {
+func (r *Receiver) FileCleaner(localList FileList, deleteList []int) error {
 	// Since file list was already sorted, we can iterate it in the reverse direction to traverse the file tree in post-order
 	// Thus it always cleans sub-files firstly
 	for i := len(deleteList) - 1; i >= 0; i-- {
@@ -397,7 +397,7 @@ func (r *Receiver) Sync() error {
 	if err := r.Generator(rfiles[:], newfiles[:], symlinks); err != nil {
 		return err
 	}
-	if err := r.Cleaner(lfiles[:], oldfiles[:]); err != nil {
+	if err := r.FileCleaner(lfiles[:], oldfiles[:]); err != nil {
 		return err
 	}
 	if err := r.FinalPhase(); err != nil {
