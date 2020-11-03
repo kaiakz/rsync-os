@@ -111,3 +111,13 @@ func TrimPrepath(prepath string) string {
 	}
 	return ppath
 }
+
+func longestMatch(left []byte, right []byte) int {
+	i := 0
+	for ; i < len(left) && i < len(right) && i < 256; i++ {
+		if left[i] != right[i] {
+			break
+		}
+	}
+	return i;
+}
