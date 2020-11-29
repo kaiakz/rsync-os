@@ -2,10 +2,10 @@
 ## A port of rsync written in Go, with object storage support
 
 # Introduction
-rsync-os is a port of rsync written in Go. Its goal is to be a modern rsync-compatible tool with features like:
+rsync-os is a Golang implementation of Rsync built from scratch. Its goal is to be a modern rsync-compatible tool with features like:
 * Supports file storage and object storage
-* Uses a subset of rsync wire protocol to stop block efficient transfer (For sender and receiver)
-* Provides APIs
+* Uses a subset of rsync wire protocol to avoid blocks efficient transfer (For sender and receiver)
+* Rsync APIs
 * Safe 
 
 ![client](https://raw.githubusercontent.com/kaiakz/rsync-os/master/docs/client.jpg)
@@ -45,13 +45,13 @@ rsync-os is the express edition of rsync, with object storage support. It uses a
 rclone does not support rsync wire protocol although it is called "rsync for object storage". With rclone you can't transfer files between rsync and object storage.
 
 #### Why we don't need rolling block checksum for regular file?
-In rsync algorithm, rsync requires random reading and writing of files to do the block exchange. But object storage does not support that.
+In the rsync algorithm, rsync requires random access of files to do the block exchange. But object storage does not support that.
 
 rsync-os simplifies the rsync algorithm to avoid random reading and writing, since rsync-os don't need to do a rolling checksum scanning the file. 
 
 As a client, when a file has different size or modified time compared to the remote file, rsync-os just pretend 'the file does not exist here', then send a reply to download the entire file from the server and finally replace it.
 
-As a server, 
+As a server, TBC
 
 #### HandShake
 rysnc-os supports rsync protocol 27. 
@@ -82,6 +82,7 @@ Unlike rsync, rsync-os reimplements this part: It just does multiplexing & de-mu
 * [yajsync](https://github.com/perlundq/yajsync), a port of rsync written in Java
 * [rsyn](https://github.com/sourcefrog/rsyn), wire-compaible rsync in Rust
 * [acrosync-library](https://github.com/gilbertchen/acrosync-library)
+* [repositoryd](https://github.com/APNIC-net/repositoryd), An rsync-compatible RPKI repository daemon.
 * https://rsync.samba.org/resources.html
 * https://github.com/boundary/wireshark/blob/master/epan/dissectors/packet-rsync.c
 * https://tools.ietf.org/html/rfc5781

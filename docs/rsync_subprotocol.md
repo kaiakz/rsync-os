@@ -1,5 +1,5 @@
 # Rsync subprotocol
-A subset of rsync protocol without block checksum, designed for the compatibility of any version of standard rsync receiver/sender (client/server/daemon). 
+A subset of rsync protocol without block checksum, designed for the compatibility of any version of standard rsync receiver/sender (client/server). 
 
 ## Introdution
 In the rsync algorithm, rsync requires random access of files to do the block exchange. It will cause a high CPU and disk usage. `rsync subprotocol` simplifies the block exchange to avoid that. It can **work with sequential files**.
@@ -12,7 +12,7 @@ In the `rsync algorithm`, after the receiver reads the file list, it interates t
 2. exists but was modified (has different size or last modification time): the receiver examines each file in blocks of a fixed size. Each block will be hashed twice (Adler-32 and MD4/MD5), and sent to the sender.
 3. does not exist or empty: can't hash blocks of file, so just send a zero block to require the entire file.
 
-But in `rsync subprotocol`, receiver do not support block checksum, so it won't send any hashes to the sender, but zero blocks instead. For a modified file, receiver always pretends `the file does not exist` to get the entire file from sender.
+But in `rsync subprotocol`, receiver do not support block checksum, so it won't send any hashes to the sender, but zero blocks instead. For a modified file, receiver always pretends `the file does not exist` to get the entire file from sender. **Just like you specify the argument `--whole-file` in standard rsync.**
 
 
 ## Sender Side
