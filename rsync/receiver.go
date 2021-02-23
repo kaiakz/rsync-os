@@ -340,8 +340,8 @@ func (r *Receiver) FileCleaner(localList FileList, deleteList []int) error {
 	// Since file list was already sorted, we can iterate it in the reverse direction to traverse the file tree in post-order
 	// Thus it always cleans sub-files firstly
 	for i := len(deleteList) - 1; i >= 0; i-- {
-		fname := string(localList[i].Path)
-		err := r.storage.Delete(fname, localList[i].Mode)
+		fname := string(localList[deleteList[i]].Path)
+		err := r.storage.Delete(fname, localList[deleteList[i]].Mode)
 		log.Println("Deleted:", fname)
 		if err != nil {
 			return err
