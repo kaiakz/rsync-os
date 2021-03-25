@@ -42,9 +42,9 @@ func (r *Receiver) SendExclusions() error {
 }
 
 // Return a filelist from remote
-func (r *Receiver) RecvFileList() (FileList, map[int][]byte, error) {
+func (r *Receiver) RecvFileList() (FileList, map[string][]byte, error) {
 	filelist := make(FileList, 0, 1 *M)
-	symlinks := make(map[int][]byte)
+	symlinks := make(map[string][]byte)
 	for {
 		flags, err := r.conn.ReadByte()
 		if err != nil {
@@ -151,7 +151,7 @@ func (r *Receiver) RecvFileList() (FileList, map[int][]byte, error) {
 			}
 			slink := make([]byte, sllen)
 			_, err = io.ReadFull(r.conn, slink)
-			symlinks[lastIndex+1] = slink
+			symlinks[string(path)] = slink
 			if err != nil {
 				return filelist, symlinks, errors.New("Failed to read symlink")
 			}
@@ -175,7 +175,7 @@ func (r *Receiver) RecvFileList() (FileList, map[int][]byte, error) {
 }
 
 // Generator: handle files: if it's a regular file, send its index. Otherwise, put them to storage
-func (r *Receiver) Generator(remoteList FileList, downloadList []int, symlinks map[int][]byte) error {
+func (r *Receiver) Generator(remoteList FileList, downloadList []int, symlinks map[string][]byte) error {
 	emptyBlocks := make([]byte, 16) // 4 + 4 + 4 + 4 bytes, all bytes set to 0
 	content := new(bytes.Buffer)
 
@@ -196,7 +196,7 @@ func (r *Receiver) Generator(remoteList FileList, downloadList []int, symlinks m
 			content.Reset()
 			size := remoteList[v].Size
 			if remoteList[v].Mode.IsLNK() {
-				if _, err := content.Write(symlinks[v]); err != nil {
+				if _, err := content.Write(symlinks[string(remoteList[v].Path)]); err != nil {
 					return err
 				}
 				size = int64(content.Len())
