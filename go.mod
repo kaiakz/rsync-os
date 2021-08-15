@@ -1,4 +1,4 @@
-module rsync-os
+module github.com/kaiakz/rsync-os
 
 go 1.14
 
