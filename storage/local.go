@@ -6,14 +6,15 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"rsync-os/rsync"
+
+	"github.com/kaiakz/rsync-os/rsync"
 )
 
 type Local struct {
 	workDir string // Module + Path
 }
 
-func NewLocal(module string, path string, topDir string)  (*Local, error) {
+func NewLocal(module string, path string, topDir string) (*Local, error) {
 	// First, creates a module folder under topDir
 	workDir := filepath.Join(topDir, module, path)
 	if err := os.MkdirAll(workDir, os.ModePerm); err != nil {
@@ -30,7 +31,7 @@ func (l *Local) Put(fileName string, content io.Reader, fileSize int64, metadata
 	}
 
 	if metadata.Mode.IsREG() {
-		f, err := os.OpenFile(fpath, os.O_CREATE | os.O_EXCL | os.O_WRONLY, metadata.Mode.Convert())
+		f, err := os.OpenFile(fpath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, metadata.Mode.Convert())
 		if err != nil {
 			return -1, err
 		}
@@ -54,7 +55,7 @@ func (l *Local) Delete(fileName string, mode rsync.FileMode) error {
 }
 
 func (l *Local) List() (rsync.FileList, error) {
-	filelist := make(rsync.FileList, 0, 1 << 16)
+	filelist := make(rsync.FileList, 0, 1<<16)
 
 	if err := filepath.Walk(l.workDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -64,7 +65,7 @@ func (l *Local) List() (rsync.FileList, error) {
 		filelist = append(filelist, rsync.FileInfo{
 			Path:  []byte(info.Name()),
 			Size:  info.Size(),
-			Mtime: int32(info.ModTime().Unix()),	// FIXME
+			Mtime: int32(info.ModTime().Unix()), // FIXME
 			Mode:  rsync.NewFileMode(info.Mode()),
 		})
 
@@ -74,6 +75,3 @@ func (l *Local) List() (rsync.FileList, error) {
 	}
 	return filelist, nil
 }
-
-
-

@@ -1,11 +1,12 @@
 package cache
 
 import (
-	"github.com/golang/protobuf/proto"
-	bolt "go.etcd.io/bbolt"
 	"log"
-	"rsync-os/rsync"
 	"time"
+
+	"github.com/golang/protobuf/proto"
+	"github.com/kaiakz/rsync-os/rsync"
+	bolt "go.etcd.io/bbolt"
 )
 
 // Test
@@ -32,7 +33,7 @@ func Snapshot(list rsync.FileList, module string, prepath string) {
 			value, err := proto.Marshal(&FInfo{
 				Size:  info.Size,
 				Mtime: info.Mtime,
-				Mode:  int32(info.Mode),	// FIXME: convert uint32 to int32
+				Mode:  int32(info.Mode), // FIXME: convert uint32 to int32
 			})
 			if err != nil {
 				log.Println("Marshal failed", err)
