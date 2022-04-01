@@ -1,6 +1,7 @@
 package rsync
 
 import (
+	"errors"
 	"io"
 )
 
@@ -19,9 +20,47 @@ type FS interface {
 }
 
 // Interface: Read, ReadAt, Seek, Close
-type File interface {
-	io.Reader
-	io.ReaderAt
-	io.Seeker
-	io.Closer
+// type File interface {
+// 	io.Reader
+// 	io.ReaderAt
+// 	io.Seeker
+// 	io.Closer
+// }
+
+type ReceivingFile struct {
+	src       *Conn
+	remaining int
+	chksum    []int
+}
+
+func (f *ReceivingFile) Read(p []byte) (n int, err error) {
+	if f.remaining == 0 {
+		err = f.getToken()
+		if err != nil {
+			return
+		}
+	}
+	l := len(p)
+	if l <= f.remaining {
+		n, err = f.src.Read(p)
+	} else {
+		n, err = f.src.Read(p[:f.remaining])
+	}
+	f.remaining -= n
+	return
+}
+
+func (f *ReceivingFile) getToken() (err error) {
+	var token int32
+	if token, err = f.src.ReadInt(); err != nil {
+		return
+	}
+	if token == 0 {
+		err = io.EOF
+	} else if token < 0 {
+		err = errors.New("Block Checksum hasn't supported yet")
+	} else {
+		f.remaining = int(token)
+	}
+	return
 }
