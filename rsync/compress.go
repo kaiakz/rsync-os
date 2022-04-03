@@ -40,7 +40,7 @@ func NewflatedtokenReader(reader Conn) *flatedtokenReader {
 		in: reader,
 		flatedwraper: w,
 		decompressor: flate.NewReader(w),
-		savedflag: -1,
+		savedflag: 0xff,
 		flag: 0,
 		remains: 0,
 	}

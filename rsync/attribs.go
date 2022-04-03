@@ -1,5 +1,6 @@
 package rsync
 
+/* Protocol Attributes */
 type Attribs struct {
 	Sender     bool // --sender
 	Server     bool // --server

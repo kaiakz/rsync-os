@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func SplitURIS(uri string) (string, int, string, string, error) {
+func SplitURLS(uri string) (string, int, string, string, error) {
 
 	var host, module, path string
 	first := uri
@@ -57,7 +57,7 @@ func SplitURIS(uri string) (string, int, string, string, error) {
 }
 
 // For rsync
-func SplitURI(uri string) (string, string, string, error) {
+func SplitURL(uri string) (string, string, string, error) {
 
 	var address, module, path string
 	var first = uri

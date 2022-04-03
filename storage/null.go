@@ -20,7 +20,8 @@ func (nu *NULL) Write(p []byte) (n int, err error) {
 
 func (nu *NULL) Put(fileName string, content io.Reader, fileSize int64, metadata rsync.FileMetadata) (written int64, err error) {
 	// We can do some log here
-	return io.Copy(nu, content)
+	written, err = io.Copy(nu, content)
+	return
 }
 
 func (nu *NULL) Delete(fileName string, mode rsync.FileMode) error {

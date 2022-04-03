@@ -30,7 +30,14 @@ type FS interface {
 type ReceivingFile struct {
 	src       *Conn
 	remaining int
-	chksum    []int
+	chksum    [16]byte
+}
+
+func NewReceivingFile(src *Conn) *ReceivingFile {
+	return &ReceivingFile{
+		src:       src,
+		remaining: 0,
+	}
 }
 
 func (f *ReceivingFile) Read(p []byte) (n int, err error) {
@@ -63,4 +70,8 @@ func (f *ReceivingFile) getToken() (err error) {
 		f.remaining = int(token)
 	}
 	return
+}
+
+func (f ReceivingFile) Reset() {
+	f.remaining = 0
 }

@@ -10,8 +10,9 @@ type SendReceiver interface {
 	Sync() error
 }
 
-// io.ReadWriteCloser
-// This struct has two main attributes, both of them can be used for a plain socket or an SSH
+/* io.ReadWriteCloser, wraper
+   This struct has two main attributes, both of them can be used for a plain socket or an SSH
+*/
 type Conn struct {
 	writer    io.WriteCloser // Write only
 	reader    io.ReadCloser // Read only
@@ -27,7 +28,7 @@ func (conn *Conn) Read(p []byte) (n int, err error) {
 }
 
 /* Encoding: little endian */
-// size of: int: 4, long: 8, varint: 4 or 8
+// size of: int: 4, long: 8, varint: 4 or 8 but saved as 8 here
 func (conn *Conn) ReadByte() (byte, error) {
 	val := conn.bytespool[:1]
 	_, err := io.ReadFull(conn, val)

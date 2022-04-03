@@ -1,11 +1,9 @@
 package rsync
 
 import (
-	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/kaiakz/ubuffer"
 	"io"
 	"log"
 	"sort"
@@ -18,32 +16,19 @@ import (
 3. Receive Files, pass the files to storage
 */
 type Receiver struct {
-	conn    *Conn
-	module  string
-	path    string
-	seed    int32
-	lVer    int32
-	rVer    int32
-	storage FS
-}
-
-func (r *Receiver) BuildArgs() string {
-	return ""
-}
-
-// DeMux was started here
-func (r *Receiver) StartMuxIn() {
-	r.conn.reader = NewMuxReaderV0(r.conn.reader)
-}
-
-func (r *Receiver) SendExclusions() error {
-	// Send exclusion
-	return r.conn.WriteInt(EXCLUSION_END)
+	conn     *Conn
+	module   string
+	path     string
+	seed     int32
+	lVer     int32
+	rVer     int32
+	storage  FS
+	callback Callback
 }
 
 // Return a filelist from remote
 func (r *Receiver) RecvFileList() (FileList, map[int][]byte, error) {
-	filelist := make(FileList, 0, 1 *M)
+	filelist := make(FileList, 0, 1*M)
 	symlinks := make(map[int][]byte)
 	for {
 		flags, err := r.conn.ReadByte()
@@ -103,7 +88,7 @@ func (r *Receiver) RecvFileList() (FileList, map[int][]byte, error) {
 			return filelist, symlinks, err
 		}
 
-		path := make([]byte, 0, partial + pathlen)
+		path := make([]byte, 0, partial+pathlen)
 		/* If so, use last */
 		if (flags & FLIST_NAME_SAME) != 0 { // FLIST_NAME_SAME
 			last := filelist[lastIndex]
@@ -204,7 +189,7 @@ func (r *Receiver) Generator(remoteList FileList, downloadList []int, symlinks m
 
 			if _, err := r.storage.Put(string(remoteList[v].Path), content, size, FileMetadata{
 				Mtime: remoteList[v].Mtime,
-				Mode: remoteList[v].Mode,
+				Mode:  remoteList[v].Mode,
 			}); err != nil {
 				return err
 			}
@@ -224,37 +209,38 @@ func (r *Receiver) Generator(remoteList FileList, downloadList []int, symlinks m
 	return err
 }
 
-// TODO: It is better to update files in goroutine
-func (r *Receiver) FileDownloader(localList FileList) error {
+func (r *Receiver) FileDownloader(localList FileList) (err error) {
 
 	rmd4 := make([]byte, 16)
+	rfile := NewReceivingFile(r.conn)
 
 	for {
-		index, err := r.conn.ReadInt()
-		if err != nil {
-			return err
-		}
-		if index == INDEX_END { // -1 means the end of transfer files
-			return nil
-		}
-		//fmt.Println("INDEX:", index)
-
-		count, err := r.conn.ReadInt() /* block count */
-		if err != nil {
-			return err
+		var index int32
+		index, err = r.conn.ReadInt()
+		if err != nil || index == INDEX_END { // -1 means the end of transfer files
+			return
 		}
 
-		blen, err := r.conn.ReadInt() /* block length */
+		var count int32 /* block count */
+		count, err = r.conn.ReadInt()
 		if err != nil {
-			return err
+			return
 		}
 
-		clen, err := r.conn.ReadInt() /* checksum length */
+		var blen int32 /* block length */
+		blen, err = r.conn.ReadInt()
 		if err != nil {
-			return err
+			return
 		}
 
-		remainder, err := r.conn.ReadInt() /* block remainder */
+		var clen int32 /* checksum length */
+		clen, err = r.conn.ReadInt()
+		if err != nil {
+			return
+		}
+
+		var remainder int32 /* block remainder */
+		remainder, err = r.conn.ReadInt()
 		if err != nil {
 			return err
 		}
@@ -262,10 +248,7 @@ func (r *Receiver) FileDownloader(localList FileList) error {
 		path := localList[index].Path
 		log.Println("Downloading:", string(path), count, blen, clen, remainder, localList[index].Size)
 
-		// If the file is too big to store in memory, creates a temporary file in the directory 'tmp'
-		buffer := ubuffer.NewBuffer(localList[index].Size)
-		downloadeSize := 0
-		bufwriter := bufio.NewWriter(buffer)
+		fileSize := localList[index].Size
 
 		// Create MD4
 		//lmd4 := md4.New()
@@ -273,35 +256,15 @@ func (r *Receiver) FileDownloader(localList FileList) error {
 		//	log.Println("Failed to compute md4")
 		//}
 
-		for {
-			token, err := r.conn.ReadInt()
-			if err != nil {
-				return err
-			}
-			log.Println("TOKEN", token)
-			if token == 0 {
-				break
-			} else if token < 0 {
-				return errors.New("Does not support block checksum")
-				// Reference
-			} else {
-				ctx := make([]byte, token) // FIXME: memory leak?
-				_, err = io.ReadFull(r.conn, ctx)
-				if err != nil {
-					return err
-				}
-				downloadeSize += int(token)
-				log.Println("Downloaded:", downloadeSize, "byte")
-				if _, err := bufwriter.Write(ctx); err != nil {
-					return err
-				}
-				//if _, err := lmd4.Write(ctx); err != nil {
-				//	return err
-				//}
-			}
-		}
-		if bufwriter.Flush() != nil {
-			return errors.New("Failed to flush buffer")
+		// Use a wrapper for incoming file content, and put the wrapper to storage
+		rfile.Reset()
+		var n int64
+		n, err = r.storage.Put(string(path), rfile, int64(fileSize), FileMetadata{
+			Mtime: localList[index].Mtime,
+			Mode:  localList[index].Mode,
+		})
+		if err != nil {
+			return err
 		}
 
 		// Remote MD4
@@ -311,27 +274,8 @@ func (r *Receiver) FileDownloader(localList FileList) error {
 			return err
 		}
 		// Compare two MD4
-		//if bytes.Compare(rmd4, lmd4.Sum(nil)) != 0 {
-		//	log.Println("Checksum error")
-		//}
 
-		// Put file to object storage
-		var n int64
-		n, err = buffer.Seek(0, io.SeekStart)
-
-		n, err = r.storage.Put(string(path), buffer, int64(downloadeSize), FileMetadata{
-			Mtime: localList[index].Mtime,
-			Mode:  localList[index].Mode,
-		})
-		if err != nil {
-			return err
-		}
-
-		if buffer.Finalize() != nil {
-			return errors.New("Buffer can't be finalized")
-		}
-
-		log.Printf("Successfully uploaded %s of size %d\n", path, n)
+		log.Printf("Successfully downloaded %s of size %d\n", path, n)
 	}
 }
 
@@ -365,7 +309,7 @@ func (r *Receiver) FinalPhase() error {
 
 func (r *Receiver) Sync() error {
 	defer func() {
-		log.Println("Task completed", r.conn.Close())	// TODO: How to handle errors from Close
+		log.Println("Task completed", r.conn.Close()) // TODO: How to handle errors from Close
 	}()
 
 	lfiles, err := r.storage.List()
@@ -392,11 +336,14 @@ func (r *Receiver) Sync() error {
 	if len(newfiles) == 0 && len(oldfiles) == 0 {
 		log.Println("There is nothing to do")
 	}
-	fmt.Print(newfiles, oldfiles)
+	// fmt.Print(newfiles, oldfiles)
+	newfiles = r.callback.OnRequest(rfiles, newfiles)
 
-	if err := r.Generator(rfiles[:], newfiles[:], symlinks); err != nil {
+	if err := r.Generator(rfiles, newfiles, symlinks); err != nil {
 		return err
 	}
+
+	oldfiles = r.callback.OnDelete(rfiles, oldfiles)
 	if err := r.FileCleaner(lfiles[:], oldfiles[:]); err != nil {
 		return err
 	}
@@ -405,4 +352,3 @@ func (r *Receiver) Sync() error {
 	}
 	return nil
 }
-
