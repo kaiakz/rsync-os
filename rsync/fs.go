@@ -1,7 +1,8 @@
 package rsync
 
 import (
-	"errors"
+	"encoding/binary"
+	"hash"
 	"io"
 )
 
@@ -27,51 +28,79 @@ type FS interface {
 // 	io.Closer
 // }
 
-type ReceivingFile struct {
-	src       *Conn
-	remaining int
-	chksum    [16]byte
+// An error brings the block offset
+type CopyingBlock struct {
+	Offset int
 }
 
-func NewReceivingFile(src *Conn) *ReceivingFile {
+func (b *CopyingBlock) Error() string {
+	return "Copying a block:" + string(b.Offset)
+}
+
+type ReceivingFile struct {
+	src       *Conn
+	seed      int32
+	remaining int
+	chksum    hash.Hash
+}
+
+func NewReceivingFile(src *Conn, seed int32) *ReceivingFile {
 	return &ReceivingFile{
 		src:       src,
+		seed:      seed,
 		remaining: 0,
 	}
 }
 
 func (f *ReceivingFile) Read(p []byte) (n int, err error) {
 	if f.remaining == 0 {
-		err = f.getToken()
+		err = f.parseToken()
 		if err != nil {
 			return
 		}
 	}
-	l := len(p)
-	if l <= f.remaining {
+	if len(p) <= f.remaining {
 		n, err = f.src.Read(p)
+		if err == nil {
+			f.chksum.Write(p)
+		}
 	} else {
-		n, err = f.src.Read(p[:f.remaining])
+		sp := p[:f.remaining]
+		n, err = f.src.Read(sp)
+		if err == nil {
+			f.chksum.Write(sp)
+		}
 	}
 	f.remaining -= n
 	return
 }
 
-func (f *ReceivingFile) getToken() (err error) {
+/* If here comes a negative token(copy a block from the local file),
+we need to notify the caller to handle it.
+*/
+func (f *ReceivingFile) parseToken() (err error) {
 	var token int32
 	if token, err = f.src.ReadInt(); err != nil {
 		return
 	}
-	if token == 0 {
+	if token == 0 { // the end of the file
 		err = io.EOF
 	} else if token < 0 {
-		err = errors.New("Block Checksum hasn't supported yet")
+		err = &CopyingBlock{
+			Offset: int(token),
+		}
 	} else {
 		f.remaining = int(token)
 	}
 	return
 }
 
-func (f ReceivingFile) Reset() {
+func (f *ReceivingFile) Reset() {
 	f.remaining = 0
+	f.chksum.Reset()
+	binary.Write(f.chksum, binary.LittleEndian, f.seed)
+}
+
+func (f *ReceivingFile) Sum() []byte {
+	return f.chksum.Sum(nil)
 }
